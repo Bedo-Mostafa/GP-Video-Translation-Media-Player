@@ -6,7 +6,7 @@ import os
 
 def load_translation_model():
     """Load the MarianMT model and tokenizer from local directory."""
-    model_path = os.path.join("models", "marianmt_en_ar")
+    model_path = os.path.join("models", "marianmt_en_ar_distilled")
     if not os.path.exists(model_path):
         raise FileNotFoundError(
             f"MarianMT model not found at {model_path}. Please download it first.")

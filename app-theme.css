@@ -5,7 +5,6 @@ QMainWindow {
 }
 
 QWidget {
-	/* background-color: #f2f2f2; */
 	background-color: #1e1e1e;
 	color: #333333;
 }
@@ -130,6 +129,7 @@ QPushButton#CancelButton :hover {
 }
 
 /* //////////////////// videoPlayer //////////////////////////// */
+
 QWidget#central_widget {
 	background-color: #1e1e1e;
 }
@@ -293,11 +293,3 @@ QLabel#subtitle_label {
 	margin: 10px;
 	margin-bottom: 10px;
 }
-
-/* QLabel#subtitle_label {
-	/* color: white; */
-/* font-size: 18px; */
-/* background-color: rgba(0, 0, 0, 0.5); */
-
-
-/* } */
