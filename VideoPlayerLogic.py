@@ -1,5 +1,6 @@
 import os
-from PySide6.QtMultimedia import QMediaPlayer
+import threading
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtCore import QTimer, QUrl
 import requests
 from filelock import FileLock, Timeout
@@ -9,6 +10,7 @@ from VideoPlayerUI import VideoPlayerUI
 class VideoPlayerLogic(VideoPlayerUI):
     def __init__(self, main_window):
         super().__init__(main_window)
+        self.main_window = main_window
         self.update_counter = 0
         self.update_interval = 10
         self.manual_position_update = False
@@ -39,20 +41,27 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.update_volume_icon(50)
 
     def cancel_transcription(self):
-        """Send cancel request to the server."""
-        try:
-            # Get the task ID (you could store the task ID when initiating transcription)
-            # task_id = "your_task_id_here"  # Replace or dynamically fetch the task ID
-            response = requests.post(
-                f"http://localhost:8000/cancel/{self.task_id}")
+        """Send cancel request to the server in a separate thread."""
 
-            if response.status_code == 200:
-                print("Transcription task cancelled.")
-                self.subtitle_label.setText("Task cancelled by user.")
-            else:
-                print(f"Failed to cancel task: {response.text}")
-        except Exception as e:
-            print(f"Error during cancellation: {e}")
+        def send_cancel_request():
+            try:
+                # Send the cancellation request
+                response = requests.post(
+                    f"http://localhost:8000/cancel/{self.task_id}")
+                self.media_player.stop()
+                self.audio_output = QAudioOutput()
+                self.media_player.setAudioOutput(self.audio_output)
+                self.main_window.switch_to_scene1()
+                if response.status_code == 200:
+                    print("Transcription task cancelled.")
+                    self.subtitle_label.setText("Task cancelled by user.")
+                else:
+                    print(f"Failed to cancel task: {response.text}")
+            except Exception as e:
+                print(f"Error during cancellation: {e}")
+
+        # Run the cancel request in a separate thread
+        threading.Thread(target=send_cancel_request, daemon=True).start()
 
     def toggle_volume_slider(self):
         self.volume_slider.setVisible(not self.volume_slider.isVisible())
