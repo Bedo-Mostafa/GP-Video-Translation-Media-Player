@@ -10,5 +10,3 @@ On the target machine:
 
    ```bash
    pip install -r requirements.text
-
-
