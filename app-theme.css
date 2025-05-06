@@ -237,6 +237,22 @@ QLabel#time_label {
 	min-height: 30px;
 }
 
+QPushButton#cancel_button {
+	background-color: #2a2a2a;
+	color: #b0b0b0;
+	border: none;
+	border-radius: 5px;
+	font-size: 16px;
+	padding: 5px;
+	min-width: 30px;
+	min-height: 30px;
+}
+
+QPushButton#cancel_button:hover {
+	background-color: #3a3a3a;
+}
+
+
 QPushButton#volume_button {
 	background-color: #2a2a2a;
 	color: #b0b0b0;

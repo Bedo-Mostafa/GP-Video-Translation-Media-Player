@@ -1,6 +1,7 @@
 import os
 from PySide6.QtMultimedia import QMediaPlayer
 from PySide6.QtCore import QTimer, QUrl
+import requests
 from filelock import FileLock, Timeout
 from VideoPlayerUI import VideoPlayerUI
 
@@ -12,6 +13,7 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.update_interval = 10
         self.manual_position_update = False
         self.transcript_segments = []
+        self.task_id = None
 
         # Connect signals
         self.rewind_button.clicked.connect(self.rewind_video)
@@ -20,6 +22,9 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.progress_slider.sliderMoved.connect(self.set_video_position)
         self.volume_button.clicked.connect(self.toggle_volume_slider)
         self.volume_slider.valueChanged.connect(self.change_volume)
+
+        # Connect Cancel button to cancel_transcription method
+        self.cancel_button.clicked.connect(self.cancel_transcription)
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_position_slider)
@@ -32,6 +37,22 @@ class VideoPlayerLogic(VideoPlayerUI):
 
         self.audio_output.setVolume(0.5)
         self.update_volume_icon(50)
+
+    def cancel_transcription(self):
+        """Send cancel request to the server."""
+        try:
+            # Get the task ID (you could store the task ID when initiating transcription)
+            # task_id = "your_task_id_here"  # Replace or dynamically fetch the task ID
+            response = requests.post(
+                f"http://localhost:8000/cancel/{self.task_id}")
+
+            if response.status_code == 200:
+                print("Transcription task cancelled.")
+                self.subtitle_label.setText("Task cancelled by user.")
+            else:
+                print(f"Failed to cancel task: {response.text}")
+        except Exception as e:
+            print(f"Error during cancellation: {e}")
 
     def toggle_volume_slider(self):
         self.volume_slider.setVisible(not self.volume_slider.isVisible())

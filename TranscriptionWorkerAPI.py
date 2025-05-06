@@ -24,6 +24,7 @@ class TranscriptionWorkerAPI(QThread):
         self.lock = FileLock(self.transcript_filename + ".lock")
         self.is_first_segment = True
         self._is_running = True
+        self.task_id = None
         # Reference to TranscriptionServer instance
         self.transcription_server = transcription_server
 
@@ -85,6 +86,7 @@ class TranscriptionWorkerAPI(QThread):
                     stream=True,
                     timeout=600
                 )
+                self.task_id = response.headers.get("task_id")
 
                 if response.status_code != 200:
                     self.error.emit(f"API Error: {response.text}")

@@ -52,6 +52,8 @@ class MainWindow(QMainWindow):
     def switch_to_video_player(self, path, language):
         """Switch to VideoPlayer and load the video."""
         try:
+            # dynamically fetch the task ID
+            self.video_player.task_id = self.scene2.transcription_worker.task_id
             self.video_player.load_video(path, language)
             self.stacked_widget.setCurrentIndex(self.VIDEO_PLAYER_INDEX)
         except Exception as e:

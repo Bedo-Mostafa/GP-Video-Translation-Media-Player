@@ -40,6 +40,9 @@ class TranscriptionServer:
         self.tokenizer = None
         self.server_thread = None
         self.segment_index_counter = itertools.count()
+        self.cancel_events = {}  # Dictionary to track cancellation events for each task
+        # Add this line to initialize the lock
+        self.cancel_events_lock = threading.Lock()
         self.setup_middleware()
         self.setup_routes()
 
@@ -89,6 +92,11 @@ class TranscriptionServer:
                 queue = self.segment_queues[task_id]
                 try:
                     while True:
+                        # Check if the task is canceled
+                        if self.cancel_events[task_id].is_set():
+                            print(f"Task {task_id} canceled. Stopping stream.")
+                            break
+
                         try:
                             result = queue.get(timeout=0.1)
                             if result is STOP_SIGNAL:
@@ -98,9 +106,9 @@ class TranscriptionServer:
                         except Exception:
                             await asyncio.sleep(0.1)
                 finally:
-                    self.segment_queues.pop(task_id, None)
-
-            return StreamingResponse(stream_transcription_results(), media_type="application/json")
+                    # Let process_video_with_streaming handle removing the task_id
+                    pass
+            return StreamingResponse(stream_transcription_results(), media_type="application/json", headers={"task_id": task_id})
 
         @self.app.delete("/cleanup/{task_id}")
         async def cleanup_task(task_id: str):
@@ -109,6 +117,15 @@ class TranscriptionServer:
                 shutil.rmtree(output_folder)
             self.segment_queues.pop(task_id, None)
             return {"message": f"Task {task_id} cleaned up successfully"}
+
+        @self.app.post("/cancel/{task_id}")
+        async def cancel_task(task_id: str):
+            if task_id in self.cancel_events:
+                # Trigger the cancellation event
+                self.cancel_events[task_id].set()
+                return {"message": f"Task {task_id} cancellation initiated."}
+            else:
+                return {"error": f"Task {task_id} not found."}
 
         @self.app.on_event("startup")
         async def startup_event():
@@ -154,11 +171,25 @@ class TranscriptionServer:
 
     def translation_worker(self, translation_queue: Queue, context: ProcessingContext, language: bool):
         while True:
+            # Check if the task is canceled
+            if self.cancel_events[context.task_id].is_set():
+                print(
+                    f"Task {context.task_id} canceled. Stopping translation worker.")
+                break
+
             segment = translation_queue.get()
             if segment is STOP_SIGNAL:
                 break
+
             if language:
                 segment = self.translate_segment(segment)
+
+            # Check cancellation again before pushing results
+            if self.cancel_events[context.task_id].is_set():
+                print(
+                    f"Task {context.task_id} canceled. Stopping translation worker.")
+                break
+
             self.segment_queues[context.task_id].put({
                 "segment_index": segment["index"],
                 "start_time": segment["start"],
@@ -171,12 +202,26 @@ class TranscriptionServer:
         start_time, end_time, segment_idx = job
         temp_audio_file = os.path.join(
             context.output_folder, f"segment_{segment_idx}_audio.wav")
+
         try:
+            # Check if the task is canceled
+            if self.cancel_events[context.task_id].is_set():
+                print(
+                    f"Task {context.task_id} canceled. Stopping segment processing.")
+                return
+
             cut_audio_segment(context.cleaned_audio_path,
                               temp_audio_file, start_time, end_time, self.logger)
+
             adjusted_segments = transcribe_segment(
                 model, temp_audio_file, start_time, end_time)
             for segment in adjusted_segments:
+                # Check cancellation again before adding results to the queue
+                if self.cancel_events[context.task_id].is_set():
+                    print(
+                        f"Task {context.task_id} canceled. Stopping segment processing.")
+                    return
+
                 segment["index"] = next(self.segment_index_counter)
                 translation_queue.put(segment)
         except Exception as e:
@@ -184,11 +229,16 @@ class TranscriptionServer:
         finally:
             if os.path.exists(temp_audio_file):
                 os.remove(temp_audio_file)
-            self.logger.log_step(f"Process Segment {segment_idx}", time.time(
-            ) - start_time, additional_info=f"Start: {start_time:.2f}s, End: {end_time:.2f}s")
+            self.logger.log_step(f"Process Segment {segment_idx}", time.time() - start_time,
+                                 additional_info=f"Start: {start_time:.2f}s, End: {end_time:.2f}s")
 
     def process_video_with_streaming(self, context: ProcessingContext, config: TranscriptionConfig, language: bool):
         try:
+            # Create a cancellation event for this task
+            cancel_event = threading.Event()
+            with self.cancel_events_lock:  # Ensure thread-safe access
+                self.cancel_events[context.task_id] = cancel_event
+
             self.prepare_audio_files(context)
             model = self.load_transcription_model(config)
             jobs = self.create_jobs(
@@ -200,17 +250,37 @@ class TranscriptionServer:
             translator_thread.start()
 
             with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
-                list(tqdm(executor.map(lambda job: self.process_segment(job, model, context,
-                     translation_queue), jobs), total=len(jobs), desc="Transcribing segments"))
+                for job in tqdm(jobs, total=len(jobs), desc="Transcribing segments"):
+                    if cancel_event.is_set():  # Check if cancellation is requested
+                        print(
+                            f"Task {context.task_id} canceled. Stopping executor.")
+                        break
+                    executor.submit(self.process_segment, job,
+                                    model, context, translation_queue)
 
             translation_queue.put(STOP_SIGNAL)
             translator_thread.join()
-            self.segment_queues[context.task_id].put(STOP_SIGNAL)
+
+            # Check if the task is already canceled before accessing self.segment_queues
+            if context.task_id in self.segment_queues:
+                self.segment_queues[context.task_id].put(STOP_SIGNAL)
         except Exception as e:
             print(f"Error in video processing: {e}")
-            self.segment_queues[context.task_id].put(
-                {"status": "error", "message": str(e)})
-            self.segment_queues[context.task_id].put(STOP_SIGNAL)
+            # Ensure the task is already canceled before accessing self.segment_queues
+            if context.task_id in self.segment_queues:
+                self.segment_queues[context.task_id].put(
+                    {"status": "error", "message": str(e)})
+                self.segment_queues[context.task_id].put(STOP_SIGNAL)
+        finally:
+            # Cleanup resources and remove the cancellation event
+            with self.cancel_events_lock:  # Ensure thread-safe access
+                self.cancel_events.pop(context.task_id, None)
+            if os.path.exists(context.output_folder):
+                shutil.rmtree(context.output_folder)
+
+    def stop_task(self, task_id: str):
+        if task_id in self.cancel_events:
+            self.cancel_events[task_id].set()
 
     def start(self):
         if not self.server_thread or not self.server_thread.is_alive():
