@@ -1,14 +1,15 @@
 import threading
 from datetime import datetime
 
-
 class Logger:
-    def __init__(self, log_file="log.txt"):
+    """Thread-safe logger for recording processing steps."""
+
+    def __init__(self, log_file: str = "log.txt"):
         self.log_file = log_file
         self.log_lock = threading.Lock()
 
-    def log_step(self, step_name, elapsed_time, additional_info=None):
-        """Log the time taken for a step to the log file in a thread-safe manner."""
+    def log_step(self, step_name: str, elapsed_time: float, additional_info: str = None):
+        """Log the time taken for a step to the log file."""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_message = f"[{timestamp}] Step '{step_name}' completed in {elapsed_time:.2f} seconds"
         if additional_info:

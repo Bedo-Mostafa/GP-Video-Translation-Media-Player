@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import QMainWindow, QStackedWidget
-from TranscriptionComponents.server import TranscriptionServer
+# from TranscriptionComponents.server import TranscriptionServer
 from scene1 import Scene1
 from scene2 import Scene2
 from VideoPlayerLogic import VideoPlayerLogic
+from transcription_service.api.server import TranscriptionServer
 
 
 class MainWindow(QMainWindow):
