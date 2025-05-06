@@ -30,7 +30,8 @@ def load_whisper_model(model_name):
 
     print(f"Loading Faster Whisper model '{model_name}' from {model_path}...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = WhisperModel(model_path, device=device, compute_type="int8")
+    model = WhisperModel(model_path, device=device,
+                         compute_type="int8", cpu_threads=2, num_workers=5)
     if 'model_cache' not in globals():
         globals()['model_cache'] = {}
     globals()['model_cache'][model_name] = model

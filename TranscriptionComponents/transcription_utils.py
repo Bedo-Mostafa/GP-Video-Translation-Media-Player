@@ -1,10 +1,23 @@
+import os
 from faster_whisper import WhisperModel
 
 
 def transcribe_segment(model: WhisperModel, audio_file: str, start_time: float, end_time: float) -> list:
     """Transcribe an audio segment using Faster Whisper."""
     try:
-        segments, _ = model.transcribe(audio_file, language="en", beam_size=5)
+        os.environ["OMP_NUM_THREADS"] = "2"
+        os.environ["MKL_NUM_THREADS"] = "2"
+        # segments, _ = model.transcribe(
+        #     audio_file, language="en", beam_size=5)
+        segments, _ = model.transcribe(
+            audio_file,
+            language="en",
+            beam_size=5,  # Beam search improves transcription accuracy but increases computation cost significant
+            # This disables random sampling, saving compute and producing deterministic results.
+            temperature=0.0,
+            no_speech_threshold=0.5
+        )
+
         adjusted_segments = []
         for segment in segments:
             segment_start = max(segment.start + start_time, start_time)

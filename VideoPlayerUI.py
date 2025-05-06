@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (QMainWindow, QVBoxLayout, QPushButton,
                                QWidget, QSlider, QHBoxLayout, QSizePolicy,
                                QLabel)
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QStackedLayout
 
 
 class VideoPlayerUI(QMainWindow):

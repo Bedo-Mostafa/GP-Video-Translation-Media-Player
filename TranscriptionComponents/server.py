@@ -1,3 +1,4 @@
+
 import asyncio
 import itertools
 import json
@@ -24,10 +25,11 @@ from TranscriptionComponents.transcription_utils import transcribe_segment
 from TranscriptionComponents.model_loading import load_whisper_model, load_translation_model
 from TranscriptionComponents.network_utils import is_port_available
 
+STOP_SIGNAL = object()
+
 
 class TranscriptionServer:
     def __init__(self, host: str = "0.0.0.0", port: int = 8000):
-        """Initialize the TranscriptionServer."""
         self.host = host
         self.port = port
         self.app = FastAPI(title="Video Transcription Streaming API")
@@ -37,11 +39,11 @@ class TranscriptionServer:
         self.nmt_model = None
         self.tokenizer = None
         self.server_thread = None
+        self.segment_index_counter = itertools.count()
         self.setup_middleware()
         self.setup_routes()
 
     def setup_middleware(self):
-        """Configure CORS middleware."""
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
@@ -51,7 +53,6 @@ class TranscriptionServer:
         )
 
     def setup_routes(self):
-        """Define FastAPI routes."""
         @self.app.get("/health")
         async def health_check():
             return JSONResponse(content={"status": "ok"}, status_code=200)
@@ -65,7 +66,6 @@ class TranscriptionServer:
             silence_threshold: int = Form(-35),
             language: bool = Form(False)
         ):
-            """Handle video transcription with streaming results."""
             task_id = str(uuid.uuid4())
             output_folder = f"temp/{task_id}"
             os.makedirs(output_folder, exist_ok=True)
@@ -79,134 +79,95 @@ class TranscriptionServer:
                 model_name, max_workers, min_silence_duration, silence_threshold)
             context = ProcessingContext(task_id, temp_file_path, output_folder)
 
-            background_thread = threading.Thread(
+            threading.Thread(
                 target=self.process_video_with_streaming,
-                args=(context, config, language)
-            )
-            background_thread.daemon = True
-            background_thread.start()
+                args=(context, config, language),
+                daemon=True
+            ).start()
 
             async def stream_transcription_results():
                 queue = self.segment_queues[task_id]
                 try:
                     while True:
                         try:
-                            result = queue.get(block=True, timeout=0.1)
-                            if result == "DONE":
+                            result = queue.get(timeout=0.1)
+                            if result is STOP_SIGNAL:
                                 break
                             yield json.dumps(result) + "\n"
+                            await asyncio.sleep(0)
                         except Exception:
                             await asyncio.sleep(0.1)
                 finally:
-                    if task_id in self.segment_queues:
-                        del self.segment_queues[task_id]
+                    self.segment_queues.pop(task_id, None)
 
-            return StreamingResponse(
-                stream_transcription_results(),
-                media_type="application/json"
-            )
+            return StreamingResponse(stream_transcription_results(), media_type="application/json")
 
         @self.app.delete("/cleanup/{task_id}")
         async def cleanup_task(task_id: str):
-            """Clean up task files and resources."""
             output_folder = f"temp/{task_id}"
-            if not os.path.exists(output_folder):
-                return {"message": "Task files already cleaned up or not found"}
-
-            shutil.rmtree(output_folder)
-            if task_id in self.segment_queues:
-                del self.segment_queues[task_id]
+            if os.path.exists(output_folder):
+                shutil.rmtree(output_folder)
+            self.segment_queues.pop(task_id, None)
             return {"message": f"Task {task_id} cleaned up successfully"}
 
         @self.app.on_event("startup")
         async def startup_event():
-            """Perform startup tasks."""
             os.makedirs("temp", exist_ok=True)
             self.nmt_model, self.tokenizer = load_translation_model()
 
     def prepare_audio_files(self, context: ProcessingContext):
-        """Prepare audio files for transcription."""
         start_time = time.time()
         prepare_audio(context.video_path, context.raw_audio_path,
                       context.cleaned_audio_path, self.logger)
-        elapsed_time = time.time() - start_time
-        self.logger.log_step("Prepare Audio", elapsed_time)
+        self.logger.log_step("Prepare Audio", time.time() - start_time)
 
     def load_transcription_model(self, config: TranscriptionConfig):
-        """Load the Whisper model for transcription."""
+        if config.model_name in self.model_cache:
+            return self.model_cache[config.model_name]
         start_time = time.time()
         model = load_whisper_model(config.model_name)
-        elapsed_time = time.time() - start_time
-        self.logger.log_step("Load Whisper Model", elapsed_time)
+        self.logger.log_step("Load Whisper Model", time.time() - start_time)
+        self.model_cache[config.model_name] = model
         return model
 
-    def segment_audio_file(self, context: ProcessingContext, config: TranscriptionConfig) -> List[Tuple[float, float]]:
-        """Segment audio based on silence detection."""
+    def segment_audio_file(self, context: ProcessingContext, config: TranscriptionConfig):
         start_time = time.time()
-        silent_points = segment_audio(
-            context.cleaned_audio_path,
-            context.video_path,
-            config.min_silence_duration,
-            config.silence_threshold,
-            self.logger
-        )
-        elapsed_time = time.time() - start_time
-        self.logger.log_step("Segment Audio", elapsed_time)
+        silent_points = segment_audio(context.cleaned_audio_path, context.video_path,
+                                      config.min_silence_duration, config.silence_threshold, self.logger)
+        self.logger.log_step("Segment Audio", time.time() - start_time)
         return silent_points
 
-    def create_jobs(self, context: ProcessingContext, silent_points: List[Tuple[float, float]]) -> List[Tuple[float, float, int]]:
-        """Create segment jobs for transcription."""
+    def create_jobs(self, context: ProcessingContext, silent_points: List[Tuple[float, float]]):
         start_time = time.time()
-        video_duration = get_video_duration(context.video_path)
-        jobs = create_segment_jobs(silent_points, video_duration, self.logger)
-        elapsed_time = time.time() - start_time
-        self.logger.log_step("Create Segment Jobs", elapsed_time)
+        jobs = create_segment_jobs(
+            silent_points, get_video_duration(context.video_path), self.logger)
+        self.logger.log_step("Create Segment Jobs", time.time() - start_time)
         return jobs
 
-    def translate_segment(self, segment: dict) -> dict:
-        """Translate a segment to Arabic."""
+    def translate_segment(self, segment: dict):
         try:
             translated = self.nmt_model.generate(
-                **self.tokenizer(
-                    segment["text"],
-                    return_tensors="pt",
-                    padding=True,
-                    truncation=True
-                ).to(self.nmt_model.device)
-            )
-            translated_text = self.tokenizer.decode(
-                translated[0], skip_special_tokens=True)
-            return {**segment, "text": translated_text}
-        except Exception as e:
-            print(
-                f"Translation failed for segment {segment.get('index PRF: 2')}")
+                **self.tokenizer(segment["text"], return_tensors="pt", padding=True, truncation=True).to(self.nmt_model.device))
+            return {**segment, "text": self.tokenizer.decode(translated[0], skip_special_tokens=True)}
+        except Exception:
             return {**segment, "text": "[Translation Error]"}
 
     def translation_worker(self, translation_queue: Queue, context: ProcessingContext, language: bool):
-        """Worker thread for translating segments to Arabic."""
         while True:
-            segment_to_translate = translation_queue.get()
-            if segment_to_translate is ...:  # Stop signal
+            segment = translation_queue.get()
+            if segment is STOP_SIGNAL:
                 break
             if language:
-                translated_segment = self.translate_segment(
-                    segment_to_translate)
-                text = translated_segment["text"]
-            else:
-                text = segment_to_translate["text"]
-
-            index = segment_to_translate["index"]
-            result = {
-                "segment_index": index,
-                "start_time": segment_to_translate["start"],
-                "end_time": segment_to_translate["end"],
-                "text": text
-            }
-            self.segment_queues[context.task_id].put(result)
+                segment = self.translate_segment(segment)
+            self.segment_queues[context.task_id].put({
+                "segment_index": segment["index"],
+                "start_time": segment["start"],
+                "end_time": segment["end"],
+                "text": segment["text"]
+            })
+            translation_queue.task_done()
 
     def process_segment(self, job: Tuple[float, float, int], model, context: ProcessingContext, translation_queue: Queue):
-        """Process a single audio segment."""
-        start_time_segment = time.time()
         start_time, end_time, segment_idx = job
         temp_audio_file = os.path.join(
             context.output_folder, f"segment_{segment_idx}_audio.wav")
@@ -216,83 +177,57 @@ class TranscriptionServer:
             adjusted_segments = transcribe_segment(
                 model, temp_audio_file, start_time, end_time)
             for segment in adjusted_segments:
-                index = next(itertools.count(1))
-                segment_with_index = {**segment, "index": index}
-                translation_queue.put(segment_with_index)
+                segment["index"] = next(self.segment_index_counter)
+                translation_queue.put(segment)
         except Exception as e:
             print(f"Error processing segment {segment_idx}: {str(e)}")
         finally:
             if os.path.exists(temp_audio_file):
-                try:
-                    os.remove(temp_audio_file)
-                except:
-                    pass
-            elapsed_time_segment = time.time() - start_time_segment
-            self.logger.log_step(
-                f"Process Segment {segment_idx}",
-                elapsed_time_segment,
-                additional_info=f"Start Time: {start_time:.2f}s, End Time: {end_time:.2f}s"
-            )
+                os.remove(temp_audio_file)
+            self.logger.log_step(f"Process Segment {segment_idx}", time.time(
+            ) - start_time, additional_info=f"Start: {start_time:.2f}s, End: {end_time:.2f}s")
 
     def process_video_with_streaming(self, context: ProcessingContext, config: TranscriptionConfig, language: bool):
-        """Process video with streaming transcription and translation."""
         try:
             self.prepare_audio_files(context)
             model = self.load_transcription_model(config)
-            silent_points = self.segment_audio_file(context, config)
-            jobs = self.create_jobs(context, silent_points)
+            jobs = self.create_jobs(
+                context, self.segment_audio_file(context, config))
 
             translation_queue = Queue()
-            stop_signal = ...
-
-            translator_thread = threading.Thread(
-                target=self.translation_worker,
-                args=(translation_queue, context, language)
-            )
-            translator_thread.daemon = True
+            translator_thread = threading.Thread(target=self.translation_worker, args=(
+                translation_queue, context, language), daemon=True)
             translator_thread.start()
 
             with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
-                list(tqdm(
-                    executor.map(lambda job: self.process_segment(
-                        job, model, context, translation_queue), jobs),
-                    total=len(jobs),
-                    desc="Transcribing segments"
-                ))
+                list(tqdm(executor.map(lambda job: self.process_segment(job, model, context,
+                     translation_queue), jobs), total=len(jobs), desc="Transcribing segments"))
 
-            translation_queue.put(stop_signal)
+            translation_queue.put(STOP_SIGNAL)
             translator_thread.join()
-            self.segment_queues[context.task_id].put("DONE")
-
+            self.segment_queues[context.task_id].put(STOP_SIGNAL)
         except Exception as e:
             print(f"Error in video processing: {e}")
-            if context.task_id in self.segment_queues:
-                self.segment_queues[context.task_id].put(
-                    {"status": "error", "message": str(e)})
-                self.segment_queues[context.task_id].put("DONE")
+            self.segment_queues[context.task_id].put(
+                {"status": "error", "message": str(e)})
+            self.segment_queues[context.task_id].put(STOP_SIGNAL)
 
     def start(self):
-        """Start the transcription server."""
-        if self.server_thread is None or not self.server_thread.is_alive():
-            port = self.port
-            while not is_port_available(port):
-                print(f"Port {port} is in use, trying {port + 1}")
-                port += 1
-            self.port = port
+        if not self.server_thread or not self.server_thread.is_alive():
+            while not is_port_available(self.port):
+                print(f"Port {self.port} in use, trying next...")
+                self.port += 1
             self.server_thread = threading.Thread(
                 target=self.run_api, daemon=True)
             self.server_thread.start()
-            print(
-                f"Transcription server started at http://{self.host}:{self.port}")
+            print(f"Server started at http://{self.host}:{self.port}")
         else:
-            print("Server is already running.")
+            print("Server already running.")
 
     def run_api(self):
-        """Run the FastAPI application."""
         uvicorn.run(self.app, host=self.host, port=self.port)
 
     def stop(self):
-        """Stop the transcription server."""
         if self.server_thread and self.server_thread.is_alive():
             print("Stopping transcription server...")
             self.server_thread = None

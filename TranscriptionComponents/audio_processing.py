@@ -39,7 +39,7 @@ def extract_audio_from_video(video_path, output_path, logger):
 
 def get_speech_mask(audio, sr, logger, frame_duration_ms=30):
     start_time = time.time()
-    vad = webrtcvad.Vad(3)
+    vad = webrtcvad.Vad(2)
     frame_length = int(sr * frame_duration_ms / 1000)
     padded_audio = np.pad(
         audio, (0, frame_length - len(audio) % frame_length), mode='constant')
@@ -61,7 +61,10 @@ def get_speech_mask(audio, sr, logger, frame_duration_ms=30):
 def isolate_speech_focused(audio_path, output_speech_path, logger):
     start_time = time.time()
     try:
-        y, sr = librosa.load(audio_path, sr=None, mono=True)
+        y, sr = sf.read(audio_path)
+        if y.ndim > 1:
+            y = np.mean(y, axis=1)  # Convert to mono
+
         speech_mask = get_speech_mask(y, sr, logger)
         noise_profile = y[~speech_mask]
         if len(noise_profile) < 1:
@@ -69,7 +72,7 @@ def isolate_speech_focused(audio_path, output_speech_path, logger):
                 "[WARN] No noise profile could be generated, falling back to full audio")
             noise_profile = y
         reduced_audio = nr.reduce_noise(
-            y=y, sr=sr, y_noise=noise_profile, stationary=False, prop_decrease=1.0, use_tqdm=True)
+            y=y, sr=sr, y_noise=noise_profile, stationary=False, prop_decrease=0.8, use_tqdm=True)
         sf.write(output_speech_path, reduced_audio, sr)
         print(f"[SUCCESS] Isolated speech saved to: {output_speech_path}")
         elapsed_time = time.time() - start_time
