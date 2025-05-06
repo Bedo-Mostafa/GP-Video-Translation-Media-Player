@@ -6,6 +6,9 @@ __pycache__/
 # Ignore temp folder with UUID-like subfolders
 temp/
 
+# Ignore Log Files
+*.txt
+
 # C extensions
 *.so
 
