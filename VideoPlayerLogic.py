@@ -42,16 +42,18 @@ class VideoPlayerLogic(VideoPlayerUI):
 
     def cancel_transcription(self):
         """Send cancel request to the server in a separate thread."""
+        self.media_player.stop()
+        self.audio_output.deleteLater()
+        self.audio_output = QAudioOutput()
+        self.media_player.setAudioOutput(self.audio_output)
+        self.main_window.switch_to_scene1()
 
         def send_cancel_request():
             try:
                 # Send the cancellation request
                 response = requests.post(
                     f"http://localhost:8000/cancel/{self.task_id}")
-                self.media_player.stop()
-                self.audio_output = QAudioOutput()
-                self.media_player.setAudioOutput(self.audio_output)
-                self.main_window.switch_to_scene1()
+
                 if response.status_code == 200:
                     print("Transcription task cancelled.")
                     self.subtitle_label.setText("Task cancelled by user.")
