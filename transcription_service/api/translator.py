@@ -4,7 +4,7 @@ import threading
 from transcription_service.api.constants import STOP_SIGNAL
 
 from ..config.context import ProcessingContext
-from ..utils.logger import Logger
+from ..utils.aspect import performance_log
 
 
 class Translator:
@@ -14,6 +14,7 @@ class Translator:
         self.nmt_model = None
         self.tokenizer = None
 
+    @performance_log
     def translate_segment(self, segment: dict) -> dict:
         """Translate segment text using MarianMT model."""
         try:
@@ -24,7 +25,8 @@ class Translator:
         except Exception:
             return {**segment, "text": "[Translation Error]"}
 
-    def transcribe_worker(self, translation_queue: Queue, context: ProcessingContext, language: bool, segment_queues: dict, cancel_events: dict):
+    @performance_log
+    def translation_worker(self, translation_queue: Queue, context: ProcessingContext, language: bool, segment_queues: dict, cancel_events: dict):
         """Process segments for translation and queue results."""
         while True:
             if cancel_events.get(context.task_id, threading.Event()).is_set():

@@ -7,7 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from .processor import VideoProcessor
 from .routes import setup_routes
 from .translator import Translator
-from ..utils.logger import Logger
 from ..utils.network import is_port_available
 
 
@@ -18,8 +17,7 @@ class TranscriptionServer:
         self.host = host
         self.port = port
         self.app = FastAPI(title="Video Transcription Streaming API")
-        self.logger = Logger(log_file="transcription_server_log.txt")
-        self.processor = VideoProcessor(self.logger)
+        self.processor = VideoProcessor()
         self.translator = Translator()
         self.server_thread = None
         self.setup_middleware()

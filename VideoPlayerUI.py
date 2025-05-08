@@ -87,7 +87,7 @@ class VideoPlayerUI(QMainWindow):
         control_layout.addWidget(self.time_label)
 
         # Add Cancel button to the control bar
-        self.cancel_button = QPushButton("❌")
+        self.cancel_button = QPushButton("🏠")
         self.cancel_button.setObjectName("cancel_button")
         self.cancel_button.setFixedSize(30, 30)
         control_layout.addWidget(self.cancel_button)

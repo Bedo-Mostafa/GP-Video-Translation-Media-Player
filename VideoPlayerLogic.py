@@ -46,7 +46,6 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.audio_output.deleteLater()
         self.audio_output = QAudioOutput()
         self.media_player.setAudioOutput(self.audio_output)
-        self.main_window.switch_to_scene1()
 
         def send_cancel_request():
             try:
@@ -63,7 +62,10 @@ class VideoPlayerLogic(VideoPlayerUI):
                 print(f"Error during cancellation: {e}")
 
         # Run the cancel request in a separate thread
-        threading.Thread(target=send_cancel_request, daemon=True).start()
+        thr = threading.Thread(target=send_cancel_request)
+        thr.start()
+        thr.join()
+        self.main_window.switch_to_scene1()
 
     def toggle_volume_slider(self):
         self.volume_slider.setVisible(not self.volume_slider.isVisible())

@@ -15,6 +15,7 @@ from .translator import Translator
 from ..config.context import ProcessingContext
 from ..config.transcription_config import TranscriptionConfig
 from ..models.model_loader import load_translation_model
+from ..utils.aspect import performance_log
 
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):
@@ -24,6 +25,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         return JSONResponse(content={"status": "ok"}, status_code=200)
 
     @app.post("/transcribe/")
+    @performance_log
     async def transcribe_video_streaming(
         file: UploadFile = File(...),
         model_name: str = Form("small"),
@@ -57,12 +59,10 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
                 while True:
                     if processor.cancel_events.get(task_id, threading.Event()).is_set():
                         print(f"Task {task_id} canceled. Stopping stream.")
-                        os.remove(output_folder)
                         break
                     try:
                         result = queue.get(timeout=0.1)
                         if result is STOP_SIGNAL:
-                            os.remove(output_folder)
                             break
                         yield json.dumps(result) + "\n"
                         await asyncio.sleep(0)
@@ -78,6 +78,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         )
 
     @app.delete("/cleanup/{task_id}")
+    @performance_log
     async def cleanup_task(task_id: str):
         output_folder = f"temp/{task_id}"
         if os.path.exists(output_folder):
@@ -86,6 +87,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         return {"message": f"Task {task_id} cleaned up successfully"}
 
     @app.post("/cancel/{task_id}")
+    @performance_log
     async def cancel_task(task_id: str):
         if task_id in processor.cancel_events:
             processor.cancel_events[task_id].set()
@@ -93,6 +95,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         return {"error": f"Task {task_id} not found."}
 
     @app.on_event("startup")
+    @performance_log
     async def startup_event():
         os.makedirs("temp", exist_ok=True)
         translator.nmt_model, translator.tokenizer = load_translation_model()
