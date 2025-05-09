@@ -1,5 +1,6 @@
 import os
 import threading
+import time
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtCore import QTimer, QUrl
 import requests
@@ -8,9 +9,10 @@ from VideoPlayerUI import VideoPlayerUI
 
 
 class VideoPlayerLogic(VideoPlayerUI):
-    def __init__(self, main_window):
+    def __init__(self, main_window, transcription_server=None):
         super().__init__(main_window)
         self.main_window = main_window
+        self.transcription_server = transcription_server  # Store server instance
         self.update_counter = 0
         self.update_interval = 10
         self.manual_position_update = False
@@ -41,31 +43,47 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.update_volume_icon(50)
 
     def cancel_transcription(self):
-        """Send cancel request to the server in a separate thread."""
+        """Send cancel request to the server and stop it, then switch to scene 1."""
         self.media_player.stop()
         self.audio_output.deleteLater()
         self.audio_output = QAudioOutput()
         self.media_player.setAudioOutput(self.audio_output)
 
-        def send_cancel_request():
+        def send_cancel_and_stop_server():
             try:
                 # Send the cancellation request
                 response = requests.post(
                     f"http://localhost:8000/cancel/{self.task_id}")
-
                 if response.status_code == 200:
                     print("Transcription task cancelled.")
                     self.subtitle_label.setText("Task cancelled by user.")
                 else:
                     print(f"Failed to cancel task: {response.text}")
+
+                # Stop the transcription server
+                if self.transcription_server:
+                    self.transcription_server.stop()
+                    # Wait for the server thread to terminate
+                    if self.transcription_server.server_thread:
+                        self.transcription_server.server_thread.join(
+                            timeout=5.0)
+                        if self.transcription_server.server_thread.is_alive():
+                            print(
+                                "Warning: Server thread did not terminate within timeout.")
+                        else:
+                            print("Server thread terminated successfully.")
+                else:
+                    print("No transcription server instance available to stop.")
+
             except Exception as e:
                 print(f"Error during cancellation: {e}")
+            finally:
+                # Switch to scene 1 after cancellation and server stop
+                self.main_window.switch_to_scene1()
 
-        # Run the cancel request in a separate thread
-        thr = threading.Thread(target=send_cancel_request)
+        # Run the cancel and stop server in a separate thread
+        thr = threading.Thread(target=send_cancel_and_stop_server)
         thr.start()
-        thr.join()
-        self.main_window.switch_to_scene1()
 
     def toggle_volume_slider(self):
         self.volume_slider.setVisible(not self.volume_slider.isVisible())

@@ -4,11 +4,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtCore import Qt
+import requests
 from TranscriptionWorkerAPI import TranscriptionWorkerAPI
 
 
 class Scene2(QWidget):
-    def __init__(self, main_window,transcription_server, video_path=None, language=None):
+    def __init__(self, main_window, transcription_server, video_path=None, language=None):
         super().__init__()
         self.transcription_server = transcription_server
         self.main_window = main_window
@@ -52,10 +53,10 @@ class Scene2(QWidget):
         layout.addWidget(self.progress_bar)
 
         # Back button
-        button = QPushButton("Back")
-        button.clicked.connect(self.stop_upload_and_back)
-        button.setObjectName("CancelButton")
-        layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
+        # button = QPushButton("Back")
+        # button.clicked.connect(self.stop_upload_and_back)
+        # button.setObjectName("CancelButton")
+        # layout.addWidget(button, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.setLayout(layout)
 
@@ -66,6 +67,34 @@ class Scene2(QWidget):
             self.transcription_worker.wait()
             print("Transcription worker stopped.")
             self.transcription_worker = None
+            try:
+                # Send the cancellation request
+                # response = requests.post(
+                #     f"http://localhost:8000/cancel/{self.transcription_worker.task_id}")
+                # if response.status_code == 200:
+                #     print("Transcription task cancelled.")
+                #     self.subtitle_label.setText("Task cancelled by user.")
+                # else:
+                #     print(f"Failed to cancel task: {response.text}")
+                #     return
+
+                # Stop the transcription server
+                if self.transcription_server:
+                    self.transcription_server.stop()
+                    # Wait for the server thread to terminate
+                    if self.transcription_server.server_thread:
+                        self.transcription_server.server_thread.join(
+                            timeout=5.0)
+                        if self.transcription_server.server_thread.is_alive():
+                            print(
+                                "Warning: Server thread did not terminate within timeout.")
+                        else:
+                            print("Server thread terminated successfully.")
+                else:
+                    print("No transcription server instance available to stop.")
+
+            except Exception as e:
+                print(f"Error during cancellation: {e}")
 
         self.main_window.switch_to_scene1()
 
@@ -107,7 +136,7 @@ class Scene2(QWidget):
         msg_box.exec()
 
     def update_progress(self, message):
-        print(f"Progress update: {message}")
+        # print(f"Progress update: {message}")
         if message.startswith("Uploading:"):
             percent = int(message.split(":")[1].replace("%", "").strip())
             if percent < 4:

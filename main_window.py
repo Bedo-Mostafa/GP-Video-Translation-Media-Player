@@ -27,7 +27,8 @@ class MainWindow(QMainWindow):
         # Initialize scenes
         self.scene1 = Scene1(self)
         self.scene2 = Scene2(self, self.transcription_server)
-        self.video_player = VideoPlayerLogic(self)
+        self.video_player = VideoPlayerLogic(
+            self, transcription_server=self.transcription_server)
 
         # Add scenes to the stacked widget
         self.stacked_widget.addWidget(self.scene1)
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow):
     def switch_to_scene2(self, path, language):
         """Switch to Scene2 and start transcription."""
         try:
+            # self.video_player.task_id = self.scene2.transcription_worker.task_id
             self.scene2.reset_scene()
             self.scene2.transcript(path, language)
             self.stacked_widget.setCurrentIndex(self.SCENE2_INDEX)
