@@ -1,3 +1,4 @@
+import asyncio
 import os
 import shutil
 import threading
@@ -110,12 +111,55 @@ class VideoProcessor:
     ):
         """Process video for transcription and streaming results."""
         try:
+            # Create a cancellation event for this task
             cancel_event = threading.Event()
             with self.cancel_events_lock:
                 self.cancel_events[context.task_id] = cancel_event
+
+            # Create a queue for this task if it doesn't exist
+            if context.task_id not in self.segment_queues:
+                self.segment_queues[context.task_id] = Queue()
+
+            # Prepare the audio files
             self.prepare_audio_files(context)
+
+            # Check if cancellation was requested during audio preparation
+            if cancel_event.is_set():
+                print(f"Task {context.task_id} cancelled during audio preparation")
+                if context.task_id in self.segment_queues:
+                    self.segment_queues[context.task_id].put(
+                        {"status": "cancelled", "message": "Task cancelled"}
+                    )
+                    self.segment_queues[context.task_id].put(STOP_SIGNAL)
+                return
+
+            # Load the transcription model
             model = self.load_transcription_model(config)
+
+            # Check if cancellation was requested during model loading
+            if cancel_event.is_set():
+                print(f"Task {context.task_id} cancelled during model loading")
+                if context.task_id in self.segment_queues:
+                    self.segment_queues[context.task_id].put(
+                        {"status": "cancelled", "message": "Task cancelled"}
+                    )
+                    self.segment_queues[context.task_id].put(STOP_SIGNAL)
+                return
+
+            # Create jobs from audio segments
             jobs = self.create_jobs(context, self.segment_audio_file(context, config))
+
+            # Check if cancellation was requested during job creation
+            if cancel_event.is_set():
+                print(f"Task {context.task_id} cancelled during job creation")
+                if context.task_id in self.segment_queues:
+                    self.segment_queues[context.task_id].put(
+                        {"status": "cancelled", "message": "Task cancelled"}
+                    )
+                    self.segment_queues[context.task_id].put(STOP_SIGNAL)
+                return
+
+            # Set up translation queue and worker
             translation_queue = Queue()
             translator_thread = threading.Thread(
                 target=translator.translation_worker,
@@ -129,18 +173,45 @@ class VideoProcessor:
                 daemon=True,
             )
             translator_thread.start()
+
+            # Process segments using thread pool
             with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
-                for job in tqdm(jobs, total=len(jobs), desc="Transcribing segments"):
+                futures = []
+                for job in jobs:
                     if cancel_event.is_set():
-                        print(f"Task {context.task_id} canceled. Stopping executor.")
+                        print(
+                            f"Task {context.task_id} canceled. Stopping job submission."
+                        )
                         break
-                    executor.submit(
-                        self.process_segment, job, model, context, translation_queue
+                    futures.append(
+                        executor.submit(
+                            self.process_segment, job, model, context, translation_queue
+                        )
                     )
+
+                # Wait for all futures to complete or for cancellation
+                while futures:
+                    done, futures = asyncio.get_event_loop().run_in_executor(
+                        None, asyncio.wait, futures, 0.5
+                    )
+                    if cancel_event.is_set():
+                        print(f"Task {context.task_id} canceled. Stopping processing.")
+                        break
+
+            # Signal the translation worker to stop
             translation_queue.put(STOP_SIGNAL)
-            translator_thread.join()
+            translator_thread.join(
+                timeout=5
+            )  # Allow up to 5 seconds for proper shutdown
+
+            # Ensure we send a final signal to the client
             if context.task_id in self.segment_queues:
+                if cancel_event.is_set():
+                    self.segment_queues[context.task_id].put(
+                        {"status": "cancelled", "message": "Task cancelled"}
+                    )
                 self.segment_queues[context.task_id].put(STOP_SIGNAL)
+
         except Exception as e:
             print(f"Error in video processing: {e}")
             if context.task_id in self.segment_queues:
@@ -149,7 +220,9 @@ class VideoProcessor:
                 )
                 self.segment_queues[context.task_id].put(STOP_SIGNAL)
         finally:
-            with self.cancel_events_lock:
-                self.cancel_events.pop(context.task_id, None)
-            if os.path.exists(context.output_folder):
-                shutil.rmtree(context.output_folder)
+            # Clean up resources
+            try:
+                if os.path.exists(context.output_folder):
+                    shutil.rmtree(context.output_folder)
+            except Exception as e:
+                print(f"Error cleaning up output folder: {e}")

@@ -40,24 +40,55 @@ class Translator:
         cancel_events: dict,
     ):
         """Process segments for translation and queue results."""
-        while True:
-            if cancel_events.get(context.task_id, threading.Event()).is_set():
-                print(f"Task {context.task_id} canceled. Stopping translation worker.")
-                break
-            segment = translation_queue.get()
-            if segment is STOP_SIGNAL:
-                break
-            if language:
-                segment = self.translate_segment(segment)
-            if cancel_events.get(context.task_id, threading.Event()).is_set():
-                print(f"Task {context.task_id} canceled. Stopping translation worker.")
-                break
-            segment_queues[context.task_id].put(
-                {
-                    "segment_index": segment["index"],
-                    "start_time": segment["start"],
-                    "end_time": segment["end"],
-                    "text": segment["text"],
-                }
-            )
-            translation_queue.task_done()
+        try:
+            while True:
+                if cancel_events.get(context.task_id, threading.Event()).is_set():
+                    print(
+                        f"Task {context.task_id} canceled. Stopping translation worker."
+                    )
+                    break
+
+                try:
+                    # Use a timeout to check for cancellation periodically
+                    segment = translation_queue.get(timeout=0.5)
+                except:
+                    # If the queue is empty, check for cancellation again
+                    continue
+
+                if segment is STOP_SIGNAL:
+                    break
+
+                # Check for cancellation before processing
+                if cancel_events.get(context.task_id, threading.Event()).is_set():
+                    print(
+                        f"Task {context.task_id} canceled. Stopping translation worker."
+                    )
+                    break
+
+                # Process the segment
+                if language:
+                    segment = self.translate_segment(segment)
+
+                # Check for cancellation after processing
+                if cancel_events.get(context.task_id, threading.Event()).is_set():
+                    print(
+                        f"Task {context.task_id} canceled. Stopping translation worker."
+                    )
+                    break
+
+                # Queue the segment for streaming
+                if context.task_id in segment_queues:
+                    segment_queues[context.task_id].put(
+                        {
+                            "segment_index": segment["index"],
+                            "start_time": segment["start"],
+                            "end_time": segment["end"],
+                            "text": segment["text"],
+                        }
+                    )
+
+                translation_queue.task_done()
+        except Exception as e:
+            print(f"Error in translation worker: {e}")
+        finally:
+            print(f"Translation worker for task {context.task_id} exited")

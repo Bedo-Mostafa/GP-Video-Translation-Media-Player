@@ -1,13 +1,17 @@
 import os
+import time
+from PySide6.QtCore import QThread, Signal
 import requests
 import threading
 from filelock import FileLock, Timeout
 from VideoPlayerUI import VideoPlayerUI
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+from PySide6.QtMultimedia import QMediaPlayer
 
 
 class VideoPlayerLogic(VideoPlayerUI):
+    switch_scene_signal = Signal(str)
+
     def __init__(self, main_window, transcription_server=None):
         super().__init__(main_window)
         self.main_window = main_window
@@ -25,7 +29,9 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.progress_slider.sliderMoved.connect(self.set_video_position)
         self.volume_button.clicked.connect(self.toggle_volume_slider)
         self.volume_slider.valueChanged.connect(self.change_volume)
+
         self.cancel_button.clicked.connect(self.cancel_transcription)
+        self.switch_scene_signal.connect(self.main_window.switch_to_scene1)
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_position_slider)
@@ -41,42 +47,48 @@ class VideoPlayerLogic(VideoPlayerUI):
 
     def cancel_transcription(self):
         self.media_player.stop()
-        self.audio_output.deleteLater()
-        self.audio_output = QAudioOutput()
-        self.media_player.setAudioOutput(self.audio_output)
+        self.audio_output.setMuted(True)
 
-        def send_cancel_and_stop_server():
+        def safe_cancel():
             try:
-                response = requests.post(f"http://localhost:8000/cancel/{self.task_id}")
-                if response.status_code == 200:
-                    print("Transcription task cancelled.")
-                    self.subtitle_text.setPlainText("Task cancelled by user.")
-                else:
-                    print(f"Failed to cancel task: {response.text}")
+                # Only cancel the specific task, not the entire server
+                if self.task_id:
+                    print(f"Cancelling task {self.task_id}...")
+                    # Send cancellation request to server
+                    response = requests.post(
+                        f"http://localhost:8000/cancel/{self.task_id}", timeout=5
+                    )
+                    if response.status_code == 200:
+                        print(
+                            f"Task {self.task_id} cancellation initiated successfully"
+                        )
+                    else:
+                        print(f"Failed to cancel task: {response.text}")
 
-                if self.transcription_server:
-                    self.transcription_server.stop()
-                    if self.transcription_server.server_thread:
-                        self.transcription_server.server_thread.join(timeout=5.0)
-                        if self.transcription_server.server_thread.is_alive():
-                            print(
-                                "Warning: Server thread did not terminate within timeout."
-                            )
-                        else:
-                            print("Server thread terminated successfully.")
-                else:
-                    print("No transcription server instance available to stop.")
+                    # Clean up resources on server
+                    cleanup_response = requests.delete(
+                        f"http://localhost:8000/cleanup/{self.task_id}", timeout=5
+                    )
+                    if cleanup_response.status_code == 200:
+                        print(f"Task {self.task_id} cleaned up successfully")
+                    else:
+                        print(f"Failed to clean up task: {cleanup_response.text}")
 
+                    # Reset task_id after cancellation
+                    self.task_id = None
+
+                # Stop the transcription worker thread if it exists
+                if hasattr(self, "transcription_worker") and self.transcription_worker:
+                    print("Stopping transcription worker...")
+                    self.transcription_worker.stop()
+                    self.transcription_worker.wait()  # Ensure thread is joined safely
+                    print("Transcription worker stopped.")
             except Exception as e:
                 print(f"Error during cancellation: {e}")
             finally:
-                try:
-                    self.main_window.switch_to_scene1()
-                except AttributeError:
-                    print("No switch_to_scene1 method available.")
+                self.switch_scene_signal.emit("Cancelled")
 
-        thr = threading.Thread(target=send_cancel_and_stop_server)
-        thr.start()
+        threading.Thread(target=safe_cancel, daemon=True).start()
 
     def toggle_volume_slider(self):
         self.volume_slider.setVisible(not self.volume_slider.isVisible())
@@ -95,6 +107,7 @@ class VideoPlayerLogic(VideoPlayerUI):
 
     def load_video(self, video_path, language):
         self.media_player.setSource(QUrl.fromLocalFile(video_path))
+        self.audio_output.setMuted(False)
         self.media_player.play()
         self.timer.start(100)
         self.play_button.setText("⏸️")

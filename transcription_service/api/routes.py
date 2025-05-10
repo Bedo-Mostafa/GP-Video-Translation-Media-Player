@@ -61,6 +61,9 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
                 while True:
                     if processor.cancel_events.get(task_id, threading.Event()).is_set():
                         print(f"Task {task_id} canceled. Stopping stream.")
+                        yield json.dumps(
+                            {"status": "cancelled", "message": "Task cancelled by user"}
+                        ) + "\n"
                         break
                     try:
                         result = queue.get(timeout=0.1)
@@ -71,7 +74,10 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
                     except Exception:
                         await asyncio.sleep(0.1)
             finally:
-                pass
+                # Ensure we clean up resources if the client disconnects
+                if task_id in processor.cancel_events:
+                    processor.cancel_events[task_id].set()
+                print(f"Stream for task {task_id} ended")
 
         return StreamingResponse(
             stream_transcription_results(),
@@ -79,22 +85,53 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
             headers={"task_id": task_id},
         )
 
-    @app.delete("/cleanup/{task_id}")
-    @performance_log
-    async def cleanup_task(task_id: str):
-        output_folder = f"temp/{task_id}"
-        if os.path.exists(output_folder):
-            shutil.rmtree(output_folder)
-        processor.segment_queues.pop(task_id, None)
-        return {"message": f"Task {task_id} cleaned up successfully"}
-
     @app.post("/cancel/{task_id}")
     @performance_log
     async def cancel_task(task_id: str):
-        if task_id in processor.cancel_events:
-            processor.cancel_events[task_id].set()
-            return {"message": f"Task {task_id} cancellation initiated."}
-        return {"error": f"Task {task_id} not found."}
+        try:
+            if task_id in processor.cancel_events:
+                # Set the cancellation event
+                processor.cancel_events[task_id].set()
+
+                # Add a small delay to ensure the event is recognized
+                await asyncio.sleep(0.1)
+
+                # Put a message in the queue to indicate cancellation
+                if task_id in processor.segment_queues:
+                    processor.segment_queues[task_id].put(
+                        {"status": "cancelled", "message": "Task cancelled by user"}
+                    )
+
+                return {"message": f"Task {task_id} cancellation initiated."}
+            return {"error": f"Task {task_id} not found."}, 404
+        except Exception as e:
+            return {"error": f"Error cancelling task: {str(e)}"}, 500
+
+    @app.delete("/cleanup/{task_id}")
+    @performance_log
+    async def cleanup_task(task_id: str):
+        try:
+            # Make sure the task is cancelled first
+            if task_id in processor.cancel_events:
+                processor.cancel_events[task_id].set()
+                # Small delay to ensure cancellation is processed
+                await asyncio.sleep(0.1)
+
+            # Clean up resources
+            output_folder = f"temp/{task_id}"
+            if os.path.exists(output_folder):
+                shutil.rmtree(output_folder)
+
+            # Remove from queues
+            processor.segment_queues.pop(task_id, None)
+
+            # Clean up cancel event
+            with processor.cancel_events_lock:
+                processor.cancel_events.pop(task_id, None)
+
+            return {"message": f"Task {task_id} cleaned up successfully"}
+        except Exception as e:
+            return {"error": f"Error cleaning up task: {str(e)}"}, 500
 
     @app.on_event("startup")
     @performance_log
