@@ -1,5 +1,6 @@
 from ..audio.processing import get_video_duration
 
+
 class ProcessingContext:
     """Context for processing a transcription task."""
 

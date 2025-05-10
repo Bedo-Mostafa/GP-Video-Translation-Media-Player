@@ -39,8 +39,7 @@ class TranscriptionServer:
             while not is_port_available(self.port):
                 print(f"Port {self.port} in use, trying next...")
                 self.port += 1
-            self.server_thread = threading.Thread(
-                target=self.run_api, daemon=True)
+            self.server_thread = threading.Thread(target=self.run_api, daemon=True)
             self.server_thread.start()
             print(f"Server started at http://{self.host}:{self.port}")
         else:

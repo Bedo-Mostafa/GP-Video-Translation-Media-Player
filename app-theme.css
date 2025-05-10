@@ -138,15 +138,11 @@ QWidget#video_container {
 	background-color: #1e1e1e;
 }
 
-QVideoWidget#video_widget {
+QGraphicsView#video_widget {
 	background-color: black;
 }
 
 QWidget#control_bar {
-	background-color: #1e1e1e;
-}
-
-QWidget#volume_container {
 	background-color: #1e1e1e;
 }
 
@@ -252,7 +248,6 @@ QPushButton#cancel_button:hover {
 	background-color: #3a3a3a;
 }
 
-
 QPushButton#volume_button {
 	background-color: #2a2a2a;
 	color: #b0b0b0;
@@ -296,16 +291,4 @@ QSlider#volume_slider::sub-page:horizontal {
 QSlider#volume_slider::add-page:horizontal {
 	background: #4a4a4a;
 	border-radius: 2px;
-}
-
-QLabel#subtitle_label {
-	background-color: rgba(0, 0, 0, 128);
-	color: white;
-	font-size: 16px;
-	font-weight: bold;
-	padding: 8px;
-	/* padding: 10px; */
-	border-radius: 5px;
-	margin: 10px;
-	margin-bottom: 10px;
 }

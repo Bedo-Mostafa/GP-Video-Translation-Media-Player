@@ -6,7 +6,7 @@ class TranscriptionConfig:
         model_name: str,
         max_workers: int,
         min_silence_duration: float,
-        silence_threshold: float
+        silence_threshold: float,
     ):
         self.model_name = model_name
         self.max_workers = max_workers

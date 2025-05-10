@@ -1,6 +1,12 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QProgressBar,
-    QLabel, QMessageBox, QSizePolicy
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QProgressBar,
+    QLabel,
+    QMessageBox,
+    QSizePolicy,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtCore import Qt
@@ -9,7 +15,9 @@ from TranscriptionWorkerAPI import TranscriptionWorkerAPI
 
 
 class Scene2(QWidget):
-    def __init__(self, main_window, transcription_server, video_path=None, language=None):
+    def __init__(
+        self, main_window, transcription_server, video_path=None, language=None
+    ):
         super().__init__()
         self.transcription_server = transcription_server
         self.main_window = main_window
@@ -28,8 +36,7 @@ class Scene2(QWidget):
         # Web Engine View for SVG Animation
         self.webview = QWebEngineView()
         self.webview.setMinimumSize(400, 300)
-        self.webview.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.webview.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         self.Animation_layout = QHBoxLayout()
         self.Animation_layout.addWidget(self.webview)
@@ -83,11 +90,11 @@ class Scene2(QWidget):
                     self.transcription_server.stop()
                     # Wait for the server thread to terminate
                     if self.transcription_server.server_thread:
-                        self.transcription_server.server_thread.join(
-                            timeout=5.0)
+                        self.transcription_server.server_thread.join(timeout=5.0)
                         if self.transcription_server.server_thread.is_alive():
                             print(
-                                "Warning: Server thread did not terminate within timeout.")
+                                "Warning: Server thread did not terminate within timeout."
+                            )
                         else:
                             print("Server thread terminated successfully.")
                 else:
@@ -108,10 +115,12 @@ class Scene2(QWidget):
             return
 
         self.transcription_worker = TranscriptionWorkerAPI(
-            video_path, self.language, self.transcription_server)
+            video_path, self.language, self.transcription_server
+        )
         self.transcription_worker.progress.connect(self.update_progress)
         self.transcription_worker.receive_first_segment.connect(
-            self.handle_transcription)
+            self.handle_transcription
+        )
         self.transcription_worker.error.connect(self.handle_error)
         self.transcription_worker.start()
         print("TranscriptionWorker started")
@@ -128,7 +137,8 @@ class Scene2(QWidget):
 
         if "internet" in error_message.lower():
             msg_box.setText(
-                "Internet is not turned on. Please check your connection and try again.")
+                "Internet is not turned on. Please check your connection and try again."
+            )
         else:
             msg_box.setText(f"An error occurred: {error_message}")
 
@@ -143,8 +153,7 @@ class Scene2(QWidget):
                 self.progress_bar.setValue(0)
             else:
                 if percent == 100:
-                    self.upload_label.setText(
-                        "Processing video, please wait...")
+                    self.upload_label.setText("Processing video, please wait...")
                 self.progress_bar.setValue(percent)
         else:
             current = self.progress_bar.value()

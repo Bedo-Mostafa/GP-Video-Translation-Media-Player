@@ -8,11 +8,11 @@ import time
 
 
 class TranscriptionWorkerAPI(QThread):
-    finished = Signal(str)   # Emitted when all transcription is done
+    finished = Signal(str)  # Emitted when all transcription is done
     # Emitted when first segment transcription is done
     receive_first_segment = Signal(str)
-    progress = Signal(str)   # Emitted as segments stream in
-    error = Signal(str)      # Emitted on any error
+    progress = Signal(str)  # Emitted as segments stream in
+    error = Signal(str)  # Emitted on any error
 
     def __init__(self, video_file, language, transcription_server):
         super().__init__()
@@ -39,17 +39,21 @@ class TranscriptionWorkerAPI(QThread):
                 while attempt < max_attempts:
                     try:
                         response = requests.get(
-                            f"http://localhost:{self.transcription_server.port}/health", timeout=2)
+                            f"http://localhost:{self.transcription_server.port}/health",
+                            timeout=2,
+                        )
                         if response.status_code == 200:
                             print(
-                                f"Server is ready on port {self.transcription_server.port}")
+                                f"Server is ready on port {self.transcription_server.port}"
+                            )
                             break
                     except requests.exceptions.RequestException:
                         attempt += 1
                         time.sleep(1)  # Wait 1 second before retrying
                         if attempt == max_attempts:
                             self.error.emit(
-                                "Server failed to start within the timeout period.")
+                                "Server failed to start within the timeout period."
+                            )
                             return
                     else:
                         break
@@ -66,7 +70,7 @@ class TranscriptionWorkerAPI(QThread):
                         "max_workers": "1",
                         "min_silence_duration": "0.7",
                         "silence_threshold": "-35",
-                        "language": str(self.translate).lower()
+                        "language": str(self.translate).lower(),
                     }
                 )
 
@@ -84,7 +88,7 @@ class TranscriptionWorkerAPI(QThread):
                     data=monitor,
                     headers=headers,
                     stream=True,
-                    timeout=600
+                    timeout=600,
                 )
                 self.task_id = response.headers.get("task_id")
 
@@ -99,18 +103,21 @@ class TranscriptionWorkerAPI(QThread):
                         try:
                             segment = json.loads(line)
                             segment["start_time"] = round(
-                                segment.get("start_time", 0), 3)
-                            segment["end_time"] = round(
-                                segment.get("end_time", 0), 3)
+                                segment.get("start_time", 0), 3
+                            )
+                            segment["end_time"] = round(segment.get("end_time", 0), 3)
                             text = f"[{segment['start_time']} - {segment['end_time']}] {segment['text']}\n"
 
                             with self.lock:
-                                with open(self.transcript_filename, "a", encoding="utf-8") as f:
+                                with open(
+                                    self.transcript_filename, "a", encoding="utf-8"
+                                ) as f:
                                     f.write(text)
                                     f.flush()
                             if self.is_first_segment:
                                 self.receive_first_segment.emit(
-                                    "First Segment Received")
+                                    "First Segment Received"
+                                )
                                 self.is_first_segment = False
 
                             self.progress.emit(text)

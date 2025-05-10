@@ -1,18 +1,17 @@
 import os
-import threading
-import time
-from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
-from PySide6.QtCore import QTimer, QUrl
 import requests
+import threading
 from filelock import FileLock, Timeout
 from VideoPlayerUI import VideoPlayerUI
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 
 class VideoPlayerLogic(VideoPlayerUI):
     def __init__(self, main_window, transcription_server=None):
         super().__init__(main_window)
         self.main_window = main_window
-        self.transcription_server = transcription_server  # Store server instance
+        self.transcription_server = transcription_server
         self.update_counter = 0
         self.update_interval = 10
         self.manual_position_update = False
@@ -26,8 +25,6 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.progress_slider.sliderMoved.connect(self.set_video_position)
         self.volume_button.clicked.connect(self.toggle_volume_slider)
         self.volume_slider.valueChanged.connect(self.change_volume)
-
-        # Connect Cancel button to cancel_transcription method
         self.cancel_button.clicked.connect(self.cancel_transcription)
 
         self.timer = QTimer()
@@ -43,7 +40,6 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.update_volume_icon(50)
 
     def cancel_transcription(self):
-        """Send cancel request to the server and stop it, then switch to scene 1."""
         self.media_player.stop()
         self.audio_output.deleteLater()
         self.audio_output = QAudioOutput()
@@ -51,25 +47,21 @@ class VideoPlayerLogic(VideoPlayerUI):
 
         def send_cancel_and_stop_server():
             try:
-                # Send the cancellation request
-                response = requests.post(
-                    f"http://localhost:8000/cancel/{self.task_id}")
+                response = requests.post(f"http://localhost:8000/cancel/{self.task_id}")
                 if response.status_code == 200:
                     print("Transcription task cancelled.")
-                    self.subtitle_label.setText("Task cancelled by user.")
+                    self.subtitle_text.setPlainText("Task cancelled by user.")
                 else:
                     print(f"Failed to cancel task: {response.text}")
 
-                # Stop the transcription server
                 if self.transcription_server:
                     self.transcription_server.stop()
-                    # Wait for the server thread to terminate
                     if self.transcription_server.server_thread:
-                        self.transcription_server.server_thread.join(
-                            timeout=5.0)
+                        self.transcription_server.server_thread.join(timeout=5.0)
                         if self.transcription_server.server_thread.is_alive():
                             print(
-                                "Warning: Server thread did not terminate within timeout.")
+                                "Warning: Server thread did not terminate within timeout."
+                            )
                         else:
                             print("Server thread terminated successfully.")
                 else:
@@ -78,10 +70,11 @@ class VideoPlayerLogic(VideoPlayerUI):
             except Exception as e:
                 print(f"Error during cancellation: {e}")
             finally:
-                # Switch to scene 1 after cancellation and server stop
-                self.main_window.switch_to_scene1()
+                try:
+                    self.main_window.switch_to_scene1()
+                except AttributeError:
+                    print("No switch_to_scene1 method available.")
 
-        # Run the cancel and stop server in a separate thread
         thr = threading.Thread(target=send_cancel_and_stop_server)
         thr.start()
 
@@ -107,6 +100,10 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.play_button.setText("⏸️")
         self.transcript_segments = []
 
+        # Schedule scene updates to ensure proper video sizing
+        QTimer.singleShot(100, self.updateSceneRect)
+        QTimer.singleShot(500, self.updateSceneRect)  # Additional delay for loading
+
         try:
             transcript_path = "transcription.txt"
             if os.path.exists(transcript_path):
@@ -118,19 +115,17 @@ class VideoPlayerLogic(VideoPlayerUI):
 
     def parse_transcription(self, transcription):
         new_segments = []
-        for line in transcription.strip().split('\n'):
+        for line in transcription.strip().split("\n"):
             if line:
                 try:
-                    time_str, text = line.split(']', 1)
+                    time_str, text = line.split("]", 1)
                     time_str = time_str[1:]
-                    start_str, end_str = time_str.split('-')
+                    start_str, end_str = time_str.split("-")
                     start = float(start_str.strip())
                     end = float(end_str.strip())
-                    new_segments.append({
-                        'start': start,
-                        'end': end,
-                        'text': text.strip()
-                    })
+                    new_segments.append(
+                        {"start": start, "end": end, "text": text.strip()}
+                    )
                 except Exception as e:
                     print(f"Error parsing line: {line}")
                     continue
@@ -142,12 +137,22 @@ class VideoPlayerLogic(VideoPlayerUI):
         current_time = self.media_player.position() / 1000.0
         current_text = ""
         for segment in self.transcript_segments:
-            if segment['start'] <= current_time <= segment['end']:
-                current_text = segment['text']
+            if segment["start"] <= current_time <= segment["end"]:
+                current_text = segment["text"]
                 break
 
-        if self.subtitle_label.text() != current_text:
-            self.subtitle_label.setText(current_text)
+        if self.subtitle_text.toPlainText() != current_text:
+            # Set new text content
+            self.subtitle_text.setPlainText(current_text)
+
+            # Center align the text
+            doc = self.subtitle_text.document()
+            option = doc.defaultTextOption()
+            option.setAlignment(Qt.AlignHCenter)
+            doc.setDefaultTextOption(option)
+
+            # Update positions
+            self.updateSubtitlePosition()
 
         self.update_counter += 1
         if self.update_counter >= self.update_interval:
@@ -168,19 +173,21 @@ class VideoPlayerLogic(VideoPlayerUI):
                     with open(transcript_path, "r", encoding="utf-8") as f:
                         transcription = f.read()
                         new_segments = []
-                        for line in transcription.strip().split('\n'):
+                        for line in transcription.strip().split("\n"):
                             if line:
                                 try:
-                                    time_str, text = line.split(']', 1)
+                                    time_str, text = line.split("]", 1)
                                     time_str = time_str[1:]
-                                    start_str, end_str = time_str.split('-')
+                                    start_str, end_str = time_str.split("-")
                                     start = float(start_str.strip())
                                     end = float(end_str.strip())
-                                    new_segments.append({
-                                        'start': start,
-                                        'end': end,
-                                        'text': text.strip()
-                                    })
+                                    new_segments.append(
+                                        {
+                                            "start": start,
+                                            "end": end,
+                                            "text": text.strip(),
+                                        }
+                                    )
                                 except Exception as e:
                                     print(f"Error parsing line: {line}")
                                     continue
@@ -210,7 +217,10 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.progress_slider.setRange(0, duration)
 
     def update_position(self, position):
-        if position == 0 and self.media_player.playbackState() == QMediaPlayer.PlayingState:
+        if (
+            position == 0
+            and self.media_player.playbackState() == QMediaPlayer.PlayingState
+        ):
             print("Warning: Video position reset to 0 unexpectedly")
         if not self.manual_position_update:
             self.progress_slider.setValue(position)

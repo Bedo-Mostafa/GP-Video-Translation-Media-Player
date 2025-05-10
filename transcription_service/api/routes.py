@@ -20,6 +20,7 @@ from ..utils.aspect import performance_log
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):
     """Define API routes for health check, transcription, cleanup, and cancellation."""
+
     @app.get("/health")
     async def health_check():
         return JSONResponse(content={"status": "ok"}, status_code=200)
@@ -32,7 +33,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         max_workers: int = Form(4),
         min_silence_duration: float = Form(0.7),
         silence_threshold: int = Form(-35),
-        language: bool = Form(False)
+        language: bool = Form(False),
     ):
         task_id = str(uuid.uuid4())
         output_folder = f"temp/{task_id}"
@@ -44,13 +45,14 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
 
         processor.segment_queues[task_id] = Queue()
         config = TranscriptionConfig(
-            model_name, max_workers, min_silence_duration, silence_threshold)
+            model_name, max_workers, min_silence_duration, silence_threshold
+        )
         context = ProcessingContext(task_id, temp_file_path, output_folder)
 
         threading.Thread(
             target=processor.process_video_with_streaming,
             args=(context, config, language, translator),
-            daemon=True
+            daemon=True,
         ).start()
 
         async def stream_transcription_results():
@@ -74,7 +76,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         return StreamingResponse(
             stream_transcription_results(),
             media_type="application/json",
-            headers={"task_id": task_id}
+            headers={"task_id": task_id},
         )
 
     @app.delete("/cleanup/{task_id}")
