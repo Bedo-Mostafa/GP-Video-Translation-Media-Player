@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QGraphicsTextItem,
     QGraphicsRectItem,
     QLabel,
+    QProgressBar,
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 from PySide6.QtMultimediaWidgets import QGraphicsVideoItem
@@ -81,6 +82,15 @@ class VideoPlayerUI(QMainWindow):
         doc.setDefaultTextOption(option)
 
         self.scene.addItem(self.subtitle_text)
+
+        # Add buffering indicator
+        self.buffering_indicator = QProgressBar()
+        self.buffering_indicator.setObjectName("buffering_indicator")
+        self.buffering_indicator.setRange(0, 0)  # Indeterminate mode
+        self.buffering_indicator.setFixedHeight(3)
+        self.buffering_indicator.setTextVisible(False)
+        self.buffering_indicator.setVisible(False)  # Hidden by default
+        video_layout.addWidget(self.buffering_indicator)
 
         layout.addWidget(video_container)
 
@@ -226,3 +236,7 @@ class VideoPlayerUI(QMainWindow):
         super().showEvent(event)
         # Make sure video is properly sized when first shown
         QTimer.singleShot(100, self.updateSceneRect)
+
+    def showBuffering(self, visible=True):
+        """Show or hide the buffering indicator"""
+        self.buffering_indicator.setVisible(visible)

@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from typing import List, Tuple
 
-from tqdm import tqdm
+from concurrent.futures import wait
 
 from .constants import STOP_SIGNAL
 from ..audio.processing import prepare_audio
@@ -189,14 +189,11 @@ class VideoProcessor:
                         )
                     )
 
-                # Wait for all futures to complete or for cancellation
-                while futures:
-                    done, futures = asyncio.get_event_loop().run_in_executor(
-                        None, asyncio.wait, futures, 0.5
-                    )
-                    if cancel_event.is_set():
-                        print(f"Task {context.task_id} canceled. Stopping processing.")
-                        break
+                # Wait for all futures to complete or until cancellation is detected
+                try:
+                    wait(futures)
+                except Exception as e:
+                    print(f"Error while waiting for segment processing: {e}")
 
             # Signal the translation worker to stop
             translation_queue.put(STOP_SIGNAL)
@@ -215,9 +212,9 @@ class VideoProcessor:
         except Exception as e:
             print(f"Error in video processing: {e}")
             if context.task_id in self.segment_queues:
-                self.segment_queues[context.task_id].put(
-                    {"status": "error", "message": str(e)}
-                )
+                # self.segment_queues[context.task_id].put(
+                #     {"status": "error", "message": str(e)}
+                # )
                 self.segment_queues[context.task_id].put(STOP_SIGNAL)
         finally:
             # Clean up resources

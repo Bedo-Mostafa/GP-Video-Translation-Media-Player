@@ -1,6 +1,5 @@
 import os
-import time
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import Signal
 import requests
 import threading
 from filelock import FileLock, Timeout
@@ -21,6 +20,12 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.manual_position_update = False
         self.transcript_segments = []
         self.task_id = None
+        self.buffering_check_timer = QTimer()
+        self.buffering_check_timer.setInterval(100)
+        self.buffering_check_timer.timeout.connect(self.check_buffering_state)
+        self.last_position = 0
+        self.buffering_counter = 0
+        self.waiting_for_subtitle = False
 
         # Connect signals
         self.rewind_button.clicked.connect(self.rewind_video)
@@ -42,12 +47,75 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.media_player.positionChanged.connect(self.update_time_label)
         self.media_player.durationChanged.connect(self.update_time_label)
 
+        # Connect media player state changes to monitor buffering
+        self.media_player.playbackStateChanged.connect(
+            self.handle_playback_state_change
+        )
+        self.media_player.mediaStatusChanged.connect(self.handle_media_status_change)
+
         self.audio_output.setVolume(0.5)
         self.update_volume_icon(50)
+
+    def handle_playback_state_change(self, state):
+        """Handle changes in playback state to detect buffering"""
+        if state == QMediaPlayer.PlayingState:
+            # Start the buffering check timer when playing
+            self.buffering_check_timer.start()
+            # If we were showing buffering before, give it a moment to stabilize
+            if self.buffering_indicator.isVisible():
+                QTimer.singleShot(500, lambda: self.showBuffering(False))
+        elif state == QMediaPlayer.PausedState:
+            # Stop the buffering check when paused
+            self.buffering_check_timer.stop()
+            self.showBuffering(False)
+        elif state == QMediaPlayer.StoppedState:
+            # Stop the buffering check when stopped
+            self.buffering_check_timer.stop()
+            self.showBuffering(False)
+
+    def handle_media_status_change(self, status):
+        """Handle changes in media status to detect buffering"""
+        if status == QMediaPlayer.LoadingMedia:
+            # Show buffering during initial loading
+            self.showBuffering(True)
+        elif status == QMediaPlayer.BufferingMedia:
+            # Show buffering during buffering state
+            self.showBuffering(True)
+        elif status == QMediaPlayer.BufferedMedia:
+            # Hide buffering when fully buffered
+            self.showBuffering(False)
+        elif status == QMediaPlayer.EndOfMedia:
+            # Hide buffering at end of media
+            self.showBuffering(False)
+        elif status == QMediaPlayer.InvalidMedia:
+            # Hide buffering if media is invalid
+            self.showBuffering(False)
+
+    def check_buffering_state(self):
+        """Detect buffering by checking if position is advancing"""
+        current_position = self.media_player.position()
+
+        # If position hasn't changed for a bit and we're supposed to be playing
+        if (
+            current_position == self.last_position
+            and self.media_player.playbackState() == QMediaPlayer.PlayingState
+        ):
+            self.buffering_counter += 1
+            if self.buffering_counter >= 3:  # After ~300ms of no movement
+                self.showBuffering(True)
+        else:
+            # Position is advancing normally
+            self.buffering_counter = 0
+            if self.buffering_indicator.isVisible():
+                self.showBuffering(False)
+
+        self.last_position = current_position
 
     def cancel_transcription(self):
         self.media_player.stop()
         self.audio_output.setMuted(True)
+        self.buffering_check_timer.stop()
+        self.showBuffering(False)
 
         def safe_cancel():
             try:
@@ -106,10 +174,14 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.update_volume_icon(value)
 
     def load_video(self, video_path, language):
+        # Show buffering indicator during initial load
+        self.showBuffering(True)
+
         self.media_player.setSource(QUrl.fromLocalFile(video_path))
         self.audio_output.setMuted(False)
         self.media_player.play()
         self.timer.start(100)
+        self.buffering_check_timer.start(100)
         self.play_button.setText("⏸️")
         self.transcript_segments = []
 
@@ -149,23 +221,42 @@ class VideoPlayerLogic(VideoPlayerUI):
     def check_subtitle(self):
         current_time = self.media_player.position() / 1000.0
         current_text = ""
+        found_subtitle = False
+
         for segment in self.transcript_segments:
             if segment["start"] <= current_time <= segment["end"]:
                 current_text = segment["text"]
+                found_subtitle = True
                 break
 
-        if self.subtitle_text.toPlainText() != current_text:
-            # Set new text content
-            self.subtitle_text.setPlainText(current_text)
+        if found_subtitle:
+            if self.subtitle_text.toPlainText() != current_text:
+                self.subtitle_text.setPlainText(current_text)
 
-            # Center align the text
-            doc = self.subtitle_text.document()
-            option = doc.defaultTextOption()
-            option.setAlignment(Qt.AlignHCenter)
-            doc.setDefaultTextOption(option)
+                # Center align the text
+                doc = self.subtitle_text.document()
+                option = doc.defaultTextOption()
+                option.setAlignment(Qt.AlignHCenter)
+                doc.setDefaultTextOption(option)
 
-            # Update positions
-            self.updateSubtitlePosition()
+                self.updateSubtitlePosition()
+
+            # Resume playback if we were waiting for subtitle
+            if self.waiting_for_subtitle:
+                print("Subtitle found. Resuming playback.")
+                self.media_player.play()
+                self.play_button.setText("⏸️")
+                self.waiting_for_subtitle = False
+        else:
+            # No subtitle found at current time, pause playback if not already paused
+            if (
+                self.media_player.playbackState() == QMediaPlayer.PlayingState
+                and not self.waiting_for_subtitle
+            ):
+                print("No subtitle found. Pausing playback.")
+                self.media_player.pause()
+                self.play_button.setText("⏯️")
+                self.waiting_for_subtitle = True
 
         self.update_counter += 1
         if self.update_counter >= self.update_interval:
@@ -265,6 +356,8 @@ class VideoPlayerLogic(VideoPlayerUI):
     def set_video_position(self, position):
         self.manual_position_update = True
         self.media_player.setPosition(position)
+        # Show buffering indicator when manually seeking
+        self.showBuffering(True)
         QTimer.singleShot(100, self._reset_position_flag)
 
     def _reset_position_flag(self):
@@ -273,8 +366,12 @@ class VideoPlayerLogic(VideoPlayerUI):
     def rewind_video(self):
         position = self.media_player.position()
         self.media_player.setPosition(max(0, position - 5000))
+        # Show buffering indicator when seeking
+        self.showBuffering(True)
 
     def forward_video(self):
         position = self.media_player.position()
         duration = self.media_player.duration()
         self.media_player.setPosition(min(duration, position + 5000))
+        # Show buffering indicator when seeking
+        self.showBuffering(True)
