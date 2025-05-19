@@ -30,7 +30,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
     async def transcribe_video_streaming(
         file: UploadFile = File(...),
         model_name: str = Form("small"),
-        max_workers: int = Form(4),
+        max_workers: int = Form(2),
         min_silence_duration: float = Form(0.7),
         silence_threshold: int = Form(-35),
         language: bool = Form(False),

@@ -14,7 +14,7 @@ class ModelConfig:
     whisper_model_name: str = "small"
     whisper_compute_type: str = "int8"
     whisper_cpu_threads: int = 2
-    whisper_num_workers: int = 5
+    whisper_num_workers: int = 2
     
     # Device settings
     device: Optional[str] = None  # If None, will be automatically determined

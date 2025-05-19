@@ -69,7 +69,7 @@ class TranscriptionWorkerAPI(QThread):
                     fields={
                         "file": (os.path.basename(self.video_file), f, "video/mp4"),
                         "model_name": "small",
-                        "max_workers": "1",
+                        "max_workers": "2",
                         "min_silence_duration": "0.7",
                         "silence_threshold": "-35",
                         "language": str(self.translate).lower(),
