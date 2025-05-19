@@ -14,7 +14,7 @@ import requests
 from TranscriptionWorkerAPI import TranscriptionWorkerAPI
 
 
-class Scene2(QWidget):
+class Upload(QWidget):
     def __init__(
         self, main_window, transcription_server, video_path=None, language=None
     ):

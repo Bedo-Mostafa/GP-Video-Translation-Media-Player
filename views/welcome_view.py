@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt, QTimer
 import cv2
 
 
-class Scene1(QWidget):
+class Welcome(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window

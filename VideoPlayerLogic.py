@@ -3,7 +3,7 @@ from PySide6.QtCore import Signal
 import requests
 import threading
 from filelock import FileLock, Timeout
-from VideoPlayerUI import VideoPlayerUI
+from views.video_view import VideoPlayerUI
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtMultimedia import QMediaPlayer
 

@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import QMainWindow, QStackedWidget
+from PySide6.QtCore import QEvent
 # from TranscriptionComponents.server import TranscriptionServer
-from scene1 import Scene1
-from scene2 import Scene2
+from views.welcome_view import Welcome
+from views.upload_view import Upload
 from VideoPlayerLogic import VideoPlayerLogic
 from transcription_service.api.server import TranscriptionServer
 
@@ -25,8 +26,8 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.stacked_widget)
 
         # Initialize scenes
-        self.scene1 = Scene1(self)
-        self.scene2 = Scene2(self, self.transcription_server)
+        self.scene1 = Welcome(self)
+        self.scene2 = Upload(self, self.transcription_server)
         self.video_player = VideoPlayerLogic(
             self, transcription_server=self.transcription_server)
 
@@ -34,6 +35,33 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.scene1)
         self.stacked_widget.addWidget(self.scene2)
         self.stacked_widget.addWidget(self.video_player)
+
+    def closeEvent(self, event: QEvent):
+        """Handle window close event to clean up resources."""
+        try:
+            # Stop and clean up video player
+            if hasattr(self, 'video_player'):
+                self.video_player.media_player.stop()
+                self.video_player.audio_output.setMuted(True)
+                self.video_player.buffering_check_timer.stop()
+                self.video_player.timer.stop()
+                
+                # Cancel any ongoing transcription
+                if hasattr(self.video_player, 'cancel_transcription'):
+                    self.video_player.cancel_transcription()
+
+            # Stop transcription server
+            if hasattr(self, 'transcription_server'):
+                print("Stopping transcription server...")
+                self.transcription_server.stop()
+                print("Transcription server stopped.")
+
+            # Accept the close event
+            event.accept()
+        except Exception as e:
+            print(f"Error during cleanup: {e}")
+            # Still accept the close event even if cleanup fails
+            event.accept()
 
     def switch_to_scene1(self):
         """Switch to Scene1."""
