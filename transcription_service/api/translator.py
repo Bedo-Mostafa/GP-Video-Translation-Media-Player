@@ -1,5 +1,7 @@
 from queue import Queue
 import threading
+from typing import List, Dict
+import torch
 
 from transcription_service.api.constants import STOP_SIGNAL
 
@@ -17,6 +19,7 @@ class Translator:
     @performance_log
     def translate_segment(self, segment: dict) -> dict:
         """Translate segment text using MarianMT model."""
+        
         try:
             inputs = self.tokenizer(
                 segment["text"],
@@ -25,16 +28,17 @@ class Translator:
                 truncation=True,
                 max_length=512
             ).to(self.nmt_model.device)
+            
+            with torch.no_grad():
+                translated = self.nmt_model.generate(
+                    **inputs,
+                    num_beams=1,
+                    max_length=512,
+                )
+            
+            result = self.tokenizer.decode(translated[0], skip_special_tokens=True)
 
-            translated = self.nmt_model.generate(
-                **inputs,
-                num_beams=1,
-                max_length=512,
-            )
-            return {
-                **segment,
-                "text": self.tokenizer.decode(translated[0], skip_special_tokens=True),
-            }
+            return {**segment, "text": result}
         except Exception:
             return {**segment, "text": "[Translation Error]"}
 
