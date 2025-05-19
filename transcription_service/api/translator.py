@@ -18,10 +18,18 @@ class Translator:
     def translate_segment(self, segment: dict) -> dict:
         """Translate segment text using MarianMT model."""
         try:
+            inputs = self.tokenizer(
+                segment["text"],
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512
+            ).to(self.nmt_model.device)
+
             translated = self.nmt_model.generate(
-                **self.tokenizer(
-                    segment["text"], return_tensors="pt", padding=True, truncation=True
-                ).to(self.nmt_model.device)
+                **inputs,
+                num_beams=1,
+                max_length=512,
             )
             return {
                 **segment,

@@ -31,6 +31,7 @@ def load_translation_model(config: ModelConfig = default_config):
         device = config.device or ("cuda" if torch.cuda.is_available() else "cpu")
         logger.info(f"Using device: {device}")
         nmt_model = nmt_model.to(device)
+        nmt_model.eval()
         
         logger.info("MarianMT model loaded successfully")
         return nmt_model, tokenizer
