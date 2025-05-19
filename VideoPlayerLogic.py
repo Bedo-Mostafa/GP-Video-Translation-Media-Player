@@ -222,12 +222,15 @@ class VideoPlayerLogic(VideoPlayerUI):
         current_time = self.media_player.position() / 1000.0
         current_text = ""
         found_subtitle = False
+        has_future_subtitles = False
 
         for segment in self.transcript_segments:
             if segment["start"] <= current_time <= segment["end"]:
                 current_text = segment["text"]
                 found_subtitle = True
                 break
+            elif segment["start"] > current_time:
+                has_future_subtitles = True
 
         if found_subtitle:
             if self.subtitle_text.toPlainText() != current_text:
@@ -248,15 +251,22 @@ class VideoPlayerLogic(VideoPlayerUI):
                 self.play_button.setText("⏸️")
                 self.waiting_for_subtitle = False
         else:
-            # No subtitle found at current time, pause playback if not already paused
+            # No subtitle found at current time, but continue playing if there are future subtitles
             if (
                 self.media_player.playbackState() == QMediaPlayer.PlayingState
                 and not self.waiting_for_subtitle
+                and not has_future_subtitles
             ):
-                print("No subtitle found. Pausing playback.")
+                print("No subtitle found and no future subtitles. Pausing playback.")
                 self.media_player.pause()
                 self.play_button.setText("⏯️")
                 self.waiting_for_subtitle = True
+            elif has_future_subtitles and self.waiting_for_subtitle:
+                # Resume playback if we were waiting but found future subtitles
+                print("Future subtitles found. Resuming playback.")
+                self.media_player.play()
+                self.play_button.setText("⏸️")
+                self.waiting_for_subtitle = False
 
         self.update_counter += 1
         if self.update_counter >= self.update_interval:
