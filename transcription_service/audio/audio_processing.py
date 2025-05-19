@@ -7,11 +7,14 @@ import soundfile as sf
 import webrtcvad
 
 from ..utils.aspect import performance_log
+from ..utils.logging_config import get_audio_logger
 
+logger = get_audio_logger()
 
 @performance_log
 def get_video_duration(video_path: str) -> float:
     """Get the duration of a video file using ffprobe."""
+    logger.debug(f"Getting duration for video: {video_path}")
     cmd = [
         "ffprobe",
         "-v",
@@ -22,14 +25,22 @@ def get_video_duration(video_path: str) -> float:
         "default=noprint_wrappers=1:nokey=1",
         video_path,
     ]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True)
-    return float(result.stdout.strip())
-
+    try:
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True)
+        duration = float(result.stdout.strip())
+        logger.debug(f"Video duration: {duration} seconds")
+        return duration
+    except subprocess.CalledProcessError as e:
+        logger.error(f"FFprobe failed: {e.stderr}")
+        raise
+    except FileNotFoundError:
+        logger.error("FFprobe not found. Please ensure FFmpeg is installed and added to your PATH.")
+        raise
 
 @performance_log
 def extract_audio_from_video(video_path: str, output_path: str) -> str:
     """Extract audio from a video file using ffmpeg."""
-    print("Extracting audio from video...")
+    logger.info(f"Extracting audio from video: {video_path}")
     extract_cmd = [
         "ffmpeg",
         "-y",
@@ -46,22 +57,21 @@ def extract_audio_from_video(video_path: str, output_path: str) -> str:
     ]
     try:
         result = subprocess.run(extract_cmd, check=True, capture_output=True, text=True)
+        logger.info(f"Audio extracted successfully to: {output_path}")
         return output_path
     except subprocess.CalledProcessError as e:
-        print(f"[ERROR] FFmpeg failed: {e.stderr}")
+        logger.error(f"FFmpeg failed: {e.stderr}")
         raise
     except FileNotFoundError:
-        print(
-            "[ERROR] FFmpeg not found. Please ensure FFmpeg is installed and added to your PATH."
-        )
+        logger.error("FFmpeg not found. Please ensure FFmpeg is installed and added to your PATH.")
         raise
-
 
 @performance_log
 def get_speech_mask(
     audio: np.ndarray, sr: int, frame_duration_ms: int = 30
 ) -> np.ndarray:
     """Generate a speech mask using WebRTC VAD."""
+    logger.debug(f"Generating speech mask for audio with {len(audio)} samples")
     vad = webrtcvad.Vad(2)
     frame_length = int(sr * frame_duration_ms / 1000)
     padded_audio = np.pad(
@@ -69,6 +79,7 @@ def get_speech_mask(
     )
     frames = np.reshape(padded_audio, (-1, frame_length))
     speech_mask = np.zeros(len(audio), dtype=bool)
+    
     for i, frame in enumerate(frames):
         byte_data = (frame * 32768).astype(np.int16).tobytes()
         is_speech = vad.is_speech(byte_data, sample_rate=sr)
@@ -76,23 +87,31 @@ def get_speech_mask(
             start = i * frame_length
             end = min((i + 1) * frame_length, len(audio))
             speech_mask[start:end] = True
+    
+    speech_percentage = (np.sum(speech_mask) / len(speech_mask)) * 100
+    logger.debug(f"Speech detected in {speech_percentage:.2f}% of the audio")
     return speech_mask
-
 
 @performance_log
 def isolate_speech_focused(audio_path: str, output_speech_path: str) -> str:
     """Isolate speech from audio by reducing noise."""
+    logger.info(f"Starting speech isolation for: {audio_path}")
     try:
         y, sr = sf.read(audio_path)
+        logger.debug(f"Audio loaded: {len(y)} samples at {sr}Hz")
+        
         if y.ndim > 1:
             y = np.mean(y, axis=1)
+            logger.debug("Converted stereo to mono")
+        
         speech_mask = get_speech_mask(y, sr)
         noise_profile = y[~speech_mask]
+        
         if len(noise_profile) < 1:
-            print(
-                "[WARN] No noise profile could be generated, falling back to full audio"
-            )
+            logger.warning("No noise profile could be generated, falling back to full audio")
             noise_profile = y
+        
+        logger.info("Starting noise reduction...")
         reduced_audio = nr.reduce_noise(
             y=y,
             sr=sr,
@@ -101,19 +120,26 @@ def isolate_speech_focused(audio_path: str, output_speech_path: str) -> str:
             prop_decrease=0.8,
             use_tqdm=True,
         )
+        
         sf.write(output_speech_path, reduced_audio, sr)
-        print(f"[SUCCESS] Isolated speech saved to: {output_speech_path}")
+        logger.info(f"Speech isolation completed. Output saved to: {output_speech_path}")
         return output_speech_path
     except Exception as e:
-        print(f"[ERROR] Failed to isolate speech: {e}")
+        logger.error(f"Failed to isolate speech: {str(e)}", exc_info=True)
         return None
-
 
 @performance_log
 def prepare_audio(video_path: str, raw_audio_path: str, cleaned_audio_path: str):
     """Prepare audio by extracting and cleaning it from a video."""
-    extract_audio_from_video(video_path, raw_audio_path)
-    result = isolate_speech_focused(raw_audio_path, cleaned_audio_path)
-    if not result:
-        print("[WARNING] Using original audio instead.")
-        shutil.copy(raw_audio_path, cleaned_audio_path)
+    logger.info(f"Starting audio preparation for video: {video_path}")
+    try:
+        extract_audio_from_video(video_path, raw_audio_path)
+        result = isolate_speech_focused(raw_audio_path, cleaned_audio_path)
+        
+        if not result:
+            logger.warning("Speech isolation failed. Using original audio instead.")
+            shutil.copy(raw_audio_path, cleaned_audio_path)
+            logger.info(f"Copied original audio to: {cleaned_audio_path}")
+    except Exception as e:
+        logger.error(f"Audio preparation failed: {str(e)}", exc_info=True)
+        raise 
