@@ -1,24 +1,26 @@
-import asyncio
 import os
 import shutil
+import tempfile
 import threading
-import time
 from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Optional
 
 from concurrent.futures import wait
 
 from .constants import STOP_SIGNAL
-from ..audio.processing import prepare_audio
-from ..audio.segmentation import segment_audio, create_segment_jobs, cut_audio_segment
+from ..audio.audio_processing import prepare_audio
+from ..audio.audio_segmentation import segment_audio, create_segment_jobs, cut_audio_segment
 from ..config.context import ProcessingContext
 from ..config.transcription_config import TranscriptionConfig
 from ..models.model_loader import load_whisper_model
+from ..models.model_config import ModelConfig, default_config
 from ..utils.aspect import performance_log
 from ..utils.transcription import transcribe_segment
 from .translator import Translator
+from ..utils.logging_config import get_processor_logger
 
+logger = get_processor_logger()
 
 class VideoProcessor:
     """Handles video processing, audio segmentation, and transcription."""
@@ -28,6 +30,9 @@ class VideoProcessor:
         self.model_cache = {}
         self.cancel_events = {}
         self.cancel_events_lock = threading.Lock()
+        self.whisper_model = None
+        self.model_config = default_config
+        logger.info("TranscriptionProcessor initialized")
 
     @performance_log
     def prepare_audio_files(self, context: ProcessingContext):
@@ -37,13 +42,19 @@ class VideoProcessor:
         )
 
     @performance_log
-    def load_transcription_model(self, config: TranscriptionConfig):
-        """Load or retrieve cached Whisper model."""
-        if config.model_name in self.model_cache:
-            return self.model_cache[config.model_name]
-        model = load_whisper_model(config.model_name)
-        self.model_cache[config.model_name] = model
-        return model
+    def load_transcription_model(self, config: ModelConfig):
+        """Load or get cached Whisper model.
+        
+        Args:
+            config: ModelConfig instance with model settings
+        """
+        if self.whisper_model is None or self.model_config != config:
+            logger.info(f"Loading transcription model with config: {config}")
+            self.whisper_model = load_whisper_model(config)
+            self.model_config = config
+            logger.info("Transcription model loaded successfully")
+        else:
+            logger.debug("Using cached transcription model")
 
     @performance_log
     def segment_audio_file(
@@ -52,9 +63,7 @@ class VideoProcessor:
         """Segment audio based on silent points."""
         silent_points = segment_audio(
             context.cleaned_audio_path,
-            context.video_path,
-            config.min_silence_duration,
-            config.silence_threshold,
+            context.video_path
         )
         return silent_points
 
@@ -134,7 +143,7 @@ class VideoProcessor:
                 return
 
             # Load the transcription model
-            model = self.load_transcription_model(config)
+            self.load_transcription_model(self.model_config)
 
             # Check if cancellation was requested during model loading
             if cancel_event.is_set():
@@ -146,8 +155,12 @@ class VideoProcessor:
                     self.segment_queues[context.task_id].put(STOP_SIGNAL)
                 return
 
-            # Create jobs from audio segments
-            jobs = self.create_jobs(context, self.segment_audio_file(context, config))
+            # Get segments from audio file
+            segments = self.segment_audio_file(context, config)
+            
+            # Convert segments to jobs format
+            jobs = [(segment["start_time"], segment["end_time"], i) 
+                   for i, segment in enumerate(segments)]
 
             # Check if cancellation was requested during job creation
             if cancel_event.is_set():
@@ -185,7 +198,7 @@ class VideoProcessor:
                         break
                     futures.append(
                         executor.submit(
-                            self.process_segment, job, model, context, translation_queue
+                            self.process_segment, job, self.whisper_model, context, translation_queue
                         )
                     )
 
@@ -212,9 +225,6 @@ class VideoProcessor:
         except Exception as e:
             print(f"Error in video processing: {e}")
             if context.task_id in self.segment_queues:
-                # self.segment_queues[context.task_id].put(
-                #     {"status": "error", "message": str(e)}
-                # )
                 self.segment_queues[context.task_id].put(STOP_SIGNAL)
         finally:
             # Clean up resources
@@ -223,3 +233,89 @@ class VideoProcessor:
                     shutil.rmtree(context.output_folder)
             except Exception as e:
                 print(f"Error cleaning up output folder: {e}")
+
+    def process_video(self, video_path: str, output_folder: str) -> Dict:
+        """Process video file for transcription.
+        
+        Args:
+            video_path: Path to input video file
+            output_folder: Path to output folder for results
+            
+        Returns:
+            Dict containing processing results
+        """
+        logger.info(f"Starting video processing: {video_path}")
+        
+        try:
+            # Create temporary directory for intermediate files
+            with tempfile.TemporaryDirectory() as temp_dir:
+                logger.debug(f"Created temporary directory: {temp_dir}")
+                
+                # Prepare audio files
+                raw_audio_path = os.path.join(temp_dir, "raw_audio.wav")
+                cleaned_audio_path = os.path.join(temp_dir, "cleaned_audio.wav")
+                
+                logger.info("Preparing audio files...")
+                prepare_audio(video_path, raw_audio_path, cleaned_audio_path)
+                
+                # Segment audio
+                logger.info("Segmenting audio...")
+                segments = segment_audio(cleaned_audio_path, video_path)
+                logger.info(f"Created {len(segments)} audio segments")
+                
+                # Process each segment
+                results = []
+                for i, segment in enumerate(segments, 1):
+                    logger.info(f"Processing segment {i}/{len(segments)}")
+                    segment_result = self._process_segment(segment)
+                    results.append(segment_result)
+                
+                logger.info("Video processing completed successfully")
+                return {
+                    "status": "success",
+                    "segments": results
+                }
+                
+        except Exception as e:
+            error_msg = f"Error processing video: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {
+                "status": "error",
+                "error": error_msg
+            }
+
+    def _process_segment(self, segment: Dict) -> Dict:
+        """Process a single audio segment.
+        
+        Args:
+            segment: Dictionary containing segment information
+            
+        Returns:
+            Dict containing segment processing results
+        """
+        try:
+            logger.debug(f"Processing segment: {segment}")
+            
+            # Transcribe segment
+            transcription = self.whisper_model.transcribe(
+                segment["audio_path"],
+                language="en",
+                beam_size=5
+            )
+            
+            logger.debug(f"Transcription completed for segment {segment['id']}")
+            
+            return {
+                "id": segment["id"],
+                "start_time": segment["start_time"],
+                "end_time": segment["end_time"],
+                "text": transcription.text
+            }
+            
+        except Exception as e:
+            error_msg = f"Error processing segment {segment['id']}: {str(e)}"
+            logger.error(error_msg, exc_info=True)
+            return {
+                "id": segment["id"],
+                "error": error_msg
+            }

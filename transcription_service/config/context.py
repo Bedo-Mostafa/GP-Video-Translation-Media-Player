@@ -1,4 +1,4 @@
-from ..audio.processing import get_video_duration
+from ..audio.audio_processing import get_video_duration
 
 
 class ProcessingContext:
