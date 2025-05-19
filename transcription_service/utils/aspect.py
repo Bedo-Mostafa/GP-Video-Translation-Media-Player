@@ -118,16 +118,24 @@ def performance_log(func):
     mini_log = os.path.join(log_dir, "performance_mini.txt")
     log_lock = threading.Lock()
 
+    # Clear log files on startup
+    with log_lock:
+        try:
+            open(detailed_log, 'w').close()
+            open(mini_log, 'w').close()
+        except Exception as e:
+            print(f"Error clearing log files: {e}")
+
     def write_logs(metrics: PerformanceMetrics):
         """Write metrics to both log files in a thread-safe manner."""
         with log_lock:
             try:
                 # Write detailed log
-                with open(detailed_log, "w", encoding="utf-8") as f:
+                with open(detailed_log, "a", encoding="utf-8") as f:
                     f.write(metrics.format_metrics(func.__name__, func.__module__))
                 
                 # Write mini log
-                with open(mini_log, "w", encoding="utf-8") as f:
+                with open(mini_log, "a", encoding="utf-8") as f:
                     f.write(metrics.format_mini_metrics(func.__name__) + "\n")
             except Exception as e:
                 print(f"Error writing performance logs: {e}")
