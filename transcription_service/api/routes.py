@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 
 from .constants import STOP_SIGNAL
 from .processor import VideoProcessor
-from .translator import Translator
+from ..transcription.translator import Translator
 from ..config.context import ProcessingContext
 from ..config.transcription_config import TranscriptionConfig
 from ..models.model_loader import load_translation_model

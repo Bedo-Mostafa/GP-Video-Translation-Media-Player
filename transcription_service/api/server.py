@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .processor import VideoProcessor
 from .routes import setup_routes
-from .translator import Translator
+from ..transcription.translator import Translator
 from ..utils.network import is_port_available
 
 

@@ -1,0 +1,282 @@
+import os
+import librosa
+import numpy as np
+from typing import List, Dict, Generator, Tuple
+from concurrent.futures import ThreadPoolExecutor
+import threading
+from queue import Queue
+
+from ..utils.logging_config import get_audio_logger
+
+logger = get_audio_logger()
+
+
+def detect_silent_points_progressive(
+    audio_path: str, min_segment_duration: float = 5.0
+) -> Generator[Tuple[float, float, int], None, None]:
+    """Detect silent points in audio progressively and yield segments as they're found.
+
+    Args:
+        audio_path: Path to audio file
+        min_segment_duration: Minimum duration for a segment in seconds
+
+    Yields:
+        Tuples of (start_time, end_time, segment_idx) for each segment as they're detected
+    """
+    logger.info(f"Progressively detecting silent points in audio: {audio_path}")
+
+    try:
+        # Load audio file
+        logger.debug("Loading audio file...")
+        y, sr = librosa.load(audio_path, sr=None)
+
+        # Calculate energy
+        logger.debug("Calculating audio energy...")
+        energy = librosa.feature.rms(y=y)[0]
+
+        # Find silent points
+        logger.debug("Finding silent points progressively...")
+        threshold = np.mean(energy) * 0.5
+        silent_frames = np.where(energy < threshold)[0]
+
+        # Convert frame indices to timestamps
+        silent_points = librosa.frames_to_time(silent_frames, sr=sr)
+
+        # Process segments progressively
+        start_time = 0.0
+        segment_idx = 0
+
+        for point in silent_points:
+            # Check if this silent point forms a valid segment with the current start time
+            if point - start_time >= min_segment_duration:
+                # Yield this segment
+                yield (start_time, point, segment_idx)
+
+                # Update for next segment
+                start_time = point
+                segment_idx += 1
+
+        # Don't forget the last segment
+        duration = len(y) / sr
+        if duration - start_time >= min_segment_duration:
+            yield (start_time, duration, segment_idx)
+
+    except Exception as e:
+        error_msg = f"Error in progressive silent point detection: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise
+
+
+def segment_audio_progressive(
+    audio_path: str,
+    video_path: str,
+    segment_queue: Queue,
+    cancel_event: threading.Event,
+    first_segment_event: threading.Event,  # New parameter to signal first segment
+):
+    """Segment audio progressively and immediately queue segments for processing.
+
+    Args:
+        audio_path: Path to audio file
+        video_path: Path to video file for duration reference
+        segment_queue: Queue to put segments into as they're detected
+        cancel_event: Event to check if process should be cancelled
+        first_segment_event: Event to signal when the first segment is queued
+    """
+    logger.info(f"Progressively segmenting audio: {audio_path}")
+
+    try:
+        # Get video duration
+        from .audio_processing import get_video_duration
+
+        video_duration = get_video_duration(video_path)
+        logger.debug(f"Video duration: {video_duration} seconds")
+
+        # Try to detect silent points progressively
+        segments_found = False
+
+        for start_time, end_time, segment_idx in detect_silent_points_progressive(
+            audio_path
+        ):
+            # Check if cancellation was requested
+            if cancel_event.is_set():
+                logger.info("Cancellation requested, stopping progressive segmentation")
+                return
+
+            segments_found = True
+
+            # Create segment job and queue it immediately
+            end_time = min(end_time, video_duration)
+            job = (start_time, end_time, segment_idx)
+            segment_queue.put(job)
+            logger.debug(
+                f"Queued segment {segment_idx}: {start_time:.2f}s - {end_time:.2f}s"
+            )
+
+            # Signal that the first segment has been queued
+            if not first_segment_event.is_set():
+                logger.debug("First segment queued, signaling first_segment_event")
+                first_segment_event.set()
+
+        # If no segments were found, create time-based segments
+        if not segments_found:
+            logger.info("No silent points detected, creating time-based segments")
+            segment_idx = 0
+            segment_duration = 30.0  # 30 seconds per segment
+
+            for start_time in range(0, int(video_duration), int(segment_duration)):
+                # Check if cancellation was requested
+                if cancel_event.is_set():
+                    logger.info(
+                        "Cancellation requested, stopping time-based segmentation"
+                    )
+                    return
+
+                end_time = min(start_time + segment_duration, video_duration)
+                job = (float(start_time), end_time, segment_idx)
+                segment_queue.put(job)
+                logger.debug(
+                    f"Queued time-based segment {segment_idx}: {start_time:.2f}s - {end_time:.2f}s"
+                )
+
+                # Signal that the first segment has been queued
+                if not first_segment_event.is_set():
+                    logger.debug("First segment queued, signaling first_segment_event")
+                    first_segment_event.set()
+
+                segment_idx += 1
+
+        # Signal that all segments have been queued
+        segment_queue.put(None)  # End marker
+        logger.info("All segments have been queued for processing")
+
+    except Exception as e:
+        error_msg = f"Error in progressive audio segmentation: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        segment_queue.put(None)  # Ensure we send end marker even on error
+        raise
+
+
+def create_segment_jobs(
+    silent_points: List[float], video_duration: float
+) -> List[Dict]:
+    """Create jobs for segmenting audio based on detected silent points.
+
+    Args:
+        silent_points: List of timestamps where silence occurs
+        video_duration: Total duration of the video
+
+    Returns:
+        List of segment dictionaries
+    """
+    logger.debug("Creating segment jobs from silent points")
+
+    segments = []
+    start_time = 0.0
+
+    for i, point in enumerate(silent_points):
+        if point - start_time >= 5.0:  # Minimum segment duration
+            segment = {
+                "id": f"segment_{i}",
+                "start_time": start_time,
+                "end_time": point,
+                "audio_path": None,  # Will be set when segment is cut
+            }
+            segments.append(segment)
+            start_time = point
+
+    # Add final segment if needed
+    if video_duration - start_time >= 5.0:
+        segments.append(
+            {
+                "id": f"segment_{len(segments)}",
+                "start_time": start_time,
+                "end_time": video_duration,
+                "audio_path": None,
+            }
+        )
+
+    logger.debug(f"Created {len(segments)} segment jobs")
+    return segments
+
+
+def create_time_based_segments(video_duration: float) -> List[Dict]:
+    """Create time-based segments when no silent points are detected.
+
+    Args:
+        video_duration: Total duration of the video
+
+    Returns:
+        List of segment dictionaries
+    """
+    logger.debug("Creating time-based segments")
+
+    segment_duration = 30.0  # 30 seconds per segment
+    segments = []
+
+    for i in range(0, int(video_duration), int(segment_duration)):
+        end_time = min(i + segment_duration, video_duration)
+        segments.append(
+            {
+                "id": f"segment_{i//int(segment_duration)}",
+                "start_time": float(i),
+                "end_time": end_time,
+                "audio_path": None,
+            }
+        )
+
+    logger.debug(f"Created {len(segments)} time-based segments")
+    return segments
+
+
+def cut_audio_segment(
+    input_audio: str, output_path: str, start_time: float, end_time: float
+) -> None:
+    """Cut an audio segment using ffmpeg.
+
+    Args:
+        input_audio: Path to input audio file
+        output_path: Path to save the cut segment
+        start_time: Start time in seconds
+        end_time: End time in seconds
+    """
+    logger.debug(f"Cutting audio segment from {start_time} to {end_time}")
+
+    try:
+        import subprocess
+
+        # Create output directory if it doesn't exist
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+
+        # Build ffmpeg command
+        cmd = [
+            "ffmpeg",
+            "-i",
+            input_audio,
+            "-ss",
+            str(start_time),
+            "-to",
+            str(end_time),
+            "-c:a",
+            "pcm_s16le",
+            "-ar",
+            "16000",
+            "-ac",
+            "1",
+            output_path,
+        ]
+
+        # Execute ffmpeg command
+        logger.debug(f"Executing ffmpeg command: {' '.join(cmd)}")
+        subprocess.run(cmd, check=True, capture_output=True)
+
+        logger.debug(f"Audio segment saved to: {output_path}")
+
+    except subprocess.CalledProcessError as e:
+        error_msg = f"FFmpeg error: {e.stderr.decode()}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+    except Exception as e:
+        error_msg = f"Error cutting audio segment: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        raise
