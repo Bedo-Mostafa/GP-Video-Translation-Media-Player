@@ -5,9 +5,17 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, wait
 from queue import Queue
 from typing import List, Tuple, Dict, Optional
+import soundfile as sf
+
+import librosa
+import numpy as np
 
 from .constants import STOP_SIGNAL
-from ..audio.audio_processing import prepare_audio
+from ..audio.audio_processing import (
+    get_video_duration,
+    prepare_audio,
+    isolate_speech_focused_batch,
+)  # Import the new batch isolation function
 from ..audio.audio_segmentation_progressive import (
     segment_audio_progressive,
     cut_audio_segment,
@@ -39,6 +47,7 @@ class VideoProcessor:
     @performance_log
     def prepare_audio_files(self, context: ProcessingContext):
         """Prepare audio files by extracting and cleaning audio from video."""
+        # This now only extracts the raw audio. Batch isolation happens per segment.
         prepare_audio(
             context.video_path, context.raw_audio_path, context.cleaned_audio_path
         )
@@ -66,21 +75,44 @@ class VideoProcessor:
         context: ProcessingContext,
         translation_queue: Queue,
     ):
-        """Process a single audio segment for transcription."""
+        """Process a single audio segment for transcription, including speech isolation."""
         start_time, end_time, segment_idx = job
-        temp_audio_file = os.path.join(
-            context.output_folder, f"segment_{segment_idx}_audio.wav"
+        temp_raw_audio_segment_file = os.path.join(
+            context.output_folder, f"segment_{segment_idx}_raw_audio.wav"
         )
+        temp_cleaned_audio_segment_file = os.path.join(
+            context.output_folder, f"segment_{segment_idx}_cleaned_audio.wav"
+        )
+
         try:
             if self.cancel_events.get(context.task_id, threading.Event()).is_set():
                 print(f"Task {context.task_id} canceled. Stopping segment processing.")
                 return
+
+            # Cut the raw audio segment
             cut_audio_segment(
-                context.cleaned_audio_path, temp_audio_file, start_time, end_time
+                context.cleaned_audio_path,
+                temp_raw_audio_segment_file,
+                start_time,
+                end_time,
             )
+
+            # Isolate speech for the current segment
+            isolated_audio_path = isolate_speech_focused_batch(
+                temp_raw_audio_segment_file, temp_cleaned_audio_segment_file
+            )
+
+            if not isolated_audio_path:
+                logger.warning(
+                    f"Speech isolation failed for segment {segment_idx}. Skipping transcription."
+                )
+                return
+
+            # Transcribe the isolated speech segment
             adjusted_segments = transcribe_segment(
-                model, temp_audio_file, start_time, end_time
+                model, isolated_audio_path, start_time, end_time
             )
+
             for segment in adjusted_segments:
                 if self.cancel_events.get(context.task_id, threading.Event()).is_set():
                     print(
@@ -92,8 +124,11 @@ class VideoProcessor:
         except Exception as e:
             print(f"Error processing segment {segment_idx}: {str(e)}")
         finally:
-            if os.path.exists(temp_audio_file):
-                os.remove(temp_audio_file)
+            # Clean up temporary audio files for the segment
+            if os.path.exists(temp_raw_audio_segment_file):
+                os.remove(temp_raw_audio_segment_file)
+            if os.path.exists(temp_cleaned_audio_segment_file):
+                os.remove(temp_cleaned_audio_segment_file)
 
     @performance_log
     def process_segments_worker(
@@ -183,7 +218,7 @@ class VideoProcessor:
             if context.task_id not in self.segment_queues:
                 self.segment_queues[context.task_id] = Queue()
 
-            # Prepare the audio files
+            # Prepare the audio files (extracts raw audio)
             self.prepare_audio_files(context)
 
             # Check if cancellation was requested during audio preparation
@@ -216,19 +251,19 @@ class VideoProcessor:
             # Create event to signal when the first segment is queued
             first_segment_event = threading.Event()
 
-            # Start translation worker
-            translator_thread = threading.Thread(
-                target=translator.translation_worker,
+            # Start segmentation in a separate thread to identify segments progressively
+            segmentation_thread = threading.Thread(
+                target=segment_audio_progressive,
                 args=(
-                    translation_queue,
-                    context,
-                    language,
-                    self.segment_queues,
-                    self.cancel_events,
+                    context.cleaned_audio_path,  # This is now the raw audio path after initial extraction
+                    context.video_path,
+                    segment_queue,
+                    cancel_event,
+                    first_segment_event,  # Pass the first_segment_event
                 ),
                 daemon=True,
             )
-            translator_thread.start()
+            segmentation_thread.start()
 
             # Start segment worker before segmentation to process segments as soon as they are queued
             with ThreadPoolExecutor(max_workers=config.max_workers) as pool:
@@ -245,19 +280,19 @@ class VideoProcessor:
                 )
                 segment_worker.start()
 
-                # Start segmentation in a separate thread to identify segments progressively
-                segmentation_thread = threading.Thread(
-                    target=segment_audio_progressive,
+                # Start translation worker
+                translator_thread = threading.Thread(
+                    target=translator.translation_worker,
                     args=(
-                        context.cleaned_audio_path,
-                        context.video_path,
-                        segment_queue,
-                        cancel_event,
-                        first_segment_event,  # Pass the first_segment_event
+                        translation_queue,
+                        context,
+                        language,
+                        self.segment_queues,
+                        self.cancel_events,
                     ),
                     daemon=True,
                 )
-                segmentation_thread.start()
+                translator_thread.start()
 
                 # Wait for segmentation and processing to complete
                 segmentation_thread.join()
@@ -305,22 +340,81 @@ class VideoProcessor:
 
                 # Prepare audio files
                 raw_audio_path = os.path.join(temp_dir, "raw_audio.wav")
-                cleaned_audio_path = os.path.join(temp_dir, "cleaned_audio.wav")
+                cleaned_audio_path = os.path.join(
+                    temp_dir, "cleaned_audio.wav"
+                )  # This will now hold the raw audio initially
 
                 logger.info("Preparing audio files...")
-                prepare_audio(video_path, raw_audio_path, cleaned_audio_path)
+                prepare_audio(
+                    video_path, raw_audio_path, cleaned_audio_path
+                )  # Only extracts raw audio now
 
-                # Segment audio
+                # Segment audio (this will now segment the raw audio)
                 logger.info("Segmenting audio...")
-                segments = segment_audio_progressive(cleaned_audio_path, video_path)
+                # The process_video method is not designed for streaming,
+                # so we'll keep the original segmentation logic for this non-streaming path.
+                # However, the _process_segment will now handle batch isolation.
+                from ..audio.audio_segmentation_progressive import (
+                    detect_silent_points_progressive,
+                    create_time_based_segments,
+                    create_segment_jobs,
+                )
+
+                y, sr = sf.read(
+                    cleaned_audio_path
+                )  # Read the initially extracted raw audio
+                energy = librosa.feature.rms(y=y)[0]
+                threshold = np.mean(energy) * 0.5
+                silent_frames = np.where(energy < threshold)[0]
+                silent_points = librosa.frames_to_time(silent_frames, sr=sr)
+
+                video_duration = get_video_duration(video_path)
+
+                if silent_points.size > 0:
+                    segments = create_segment_jobs(silent_points, video_duration)
+                else:
+                    segments = create_time_based_segments(video_duration)
+
                 logger.info(f"Created {len(segments)} audio segments")
 
                 # Process each segment
                 results = []
                 for i, segment in enumerate(segments, 1):
                     logger.info(f"Processing segment {i}/{len(segments)}")
+                    # For the non-streaming path, we need to cut the segment and then isolate speech
+                    segment_raw_audio_path = os.path.join(
+                        temp_dir, f"segment_{i}_raw_audio.wav"
+                    )
+                    segment_cleaned_audio_path = os.path.join(
+                        temp_dir, f"segment_{i}_cleaned_audio.wav"
+                    )
+
+                    cut_audio_segment(
+                        cleaned_audio_path,
+                        segment_raw_audio_path,
+                        segment["start_time"],
+                        segment["end_time"],
+                    )
+                    isolated_segment_path = isolate_speech_focused_batch(
+                        segment_raw_audio_path, segment_cleaned_audio_path
+                    )
+
+                    if not isolated_segment_path:
+                        logger.warning(
+                            f"Speech isolation failed for segment {i}. Skipping transcription."
+                        )
+                        continue
+
+                    # Update the segment's audio_path to the cleaned one for transcription
+                    segment["audio_path"] = isolated_segment_path
                     segment_result = self._process_segment(segment)
                     results.append(segment_result)
+
+                    # Clean up segment-specific temp files
+                    if os.path.exists(segment_raw_audio_path):
+                        os.remove(segment_raw_audio_path)
+                    if os.path.exists(segment_cleaned_audio_path):
+                        os.remove(segment_cleaned_audio_path)
 
                 logger.info("Video processing completed successfully")
                 return {"status": "success", "segments": results}

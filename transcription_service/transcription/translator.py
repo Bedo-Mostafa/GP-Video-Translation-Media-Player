@@ -19,23 +19,23 @@ class Translator:
     @performance_log
     def translate_segment(self, segment: dict) -> dict:
         """Translate segment text using MarianMT model."""
-        
+
         try:
             inputs = self.tokenizer(
                 segment["text"],
                 return_tensors="pt",
                 padding=True,
                 truncation=True,
-                max_length=512
+                max_length=512,
             ).to(self.nmt_model.device)
-            
+
             with torch.no_grad():
                 translated = self.nmt_model.generate(
                     **inputs,
                     num_beams=1,
                     max_length=512,
                 )
-            
+
             result = self.tokenizer.decode(translated[0], skip_special_tokens=True)
 
             return {**segment, "text": result}

@@ -1,12 +1,13 @@
 import os
 import librosa
 import numpy as np
-from typing import List, Dict, Generator, Tuple
-from concurrent.futures import ThreadPoolExecutor
 import threading
+
 from queue import Queue
+from typing import List, Dict, Generator, Tuple
 
 from ..utils.logging_config import get_audio_logger
+from .audio_processing import get_video_duration
 
 logger = get_audio_logger()
 
@@ -72,7 +73,7 @@ def segment_audio_progressive(
     video_path: str,
     segment_queue: Queue,
     cancel_event: threading.Event,
-    first_segment_event: threading.Event,  # New parameter to signal first segment
+    first_segment_event: threading.Event,
 ):
     """Segment audio progressively and immediately queue segments for processing.
 
@@ -87,14 +88,14 @@ def segment_audio_progressive(
 
     try:
         # Get video duration
-        from .audio_processing import get_video_duration
-
         video_duration = get_video_duration(video_path)
         logger.debug(f"Video duration: {video_duration} seconds")
 
         # Try to detect silent points progressively
         segments_found = False
 
+        # This loop iterates over segments yielded by detect_silent_points_progressive
+        # If detect_silent_points_progressive is a generator, segments are processed one by one.
         for start_time, end_time, segment_idx in detect_silent_points_progressive(
             audio_path
         ):
@@ -108,7 +109,7 @@ def segment_audio_progressive(
             # Create segment job and queue it immediately
             end_time = min(end_time, video_duration)
             job = (start_time, end_time, segment_idx)
-            segment_queue.put(job)
+            segment_queue.put(job)  # Segment is queued for processing
             logger.debug(
                 f"Queued segment {segment_idx}: {start_time:.2f}s - {end_time:.2f}s"
             )
@@ -116,9 +117,9 @@ def segment_audio_progressive(
             # Signal that the first segment has been queued
             if not first_segment_event.is_set():
                 logger.debug("First segment queued, signaling first_segment_event")
-                first_segment_event.set()
+                first_segment_event.set()  # This notifies the VideoProcessor
 
-        # If no segments were found, create time-based segments
+        # If no segments were found by silent point detection, it falls back to time-based segments
         if not segments_found:
             logger.info("No silent points detected, creating time-based segments")
             segment_idx = 0
