@@ -1,12 +1,13 @@
 import threading
 
 from typing import Optional
-from transcription_service.api.VideoProcessor import logger
 from transcription_service.audio.audio_processing import extract_raw_audio_to_numpy
 
 from transcription_service.config.context import ProcessingContext
 from transcription_service.utils.aspect import performance_log
+from transcription_service.utils.logging_config import get_processor_logger
 
+logger = get_processor_logger()
 
 class AudioPreprocessor:
     """Simplified audio preprocessor, mainly for raw audio extraction."""

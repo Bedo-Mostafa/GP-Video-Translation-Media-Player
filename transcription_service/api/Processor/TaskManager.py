@@ -1,4 +1,4 @@
-from transcription_service.api.VideoProcessor import DEFAULT_OUTPUT_QUEUE_SIZE, logger
+from transcription_service.utils.logging_config import get_processor_logger
 from transcription_service.api.constants import STOP_SIGNAL
 
 
@@ -7,6 +7,7 @@ from queue import Full as QueueFull, Queue
 from typing import Tuple
 
 DEFAULT_OUTPUT_QUEUE_SIZE = 100  # Final client output queue size (used by TaskManager)
+logger = get_processor_logger()
 
 
 class TaskManager:

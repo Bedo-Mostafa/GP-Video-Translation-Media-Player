@@ -1,14 +1,16 @@
 # AudioSegment dataclass is no longer needed as Whisper yields its own segment structure
 
 
-from transcription_service.api.VideoProcessor import logger
+from transcription_service.utils.logging_config import get_processor_logger
+
 from transcription_service.models.model_config import ModelConfig
 from transcription_service.models.model_loader import load_whisper_model
 from transcription_service.utils.aspect import performance_log
 
+logger = get_processor_logger()
+
 
 class ModelManager:
-    # [Code from your existing VideoProcessor.py - unchanged]
     def __init__(self):
         self.whisper_model = None
         self.current_config = None
