@@ -68,11 +68,7 @@ class TranscriptionWorkerAPI(QThread):
                 encoder = MultipartEncoder(
                     fields={
                         "file": (os.path.basename(self.video_file), f, "video/mp4"),
-                        "model_name": "small",
-                        "max_workers": "2",
-                        "min_silence_duration": "0.7",
-                        "silence_threshold": "-35",
-                        "language": str(self.translate).lower(),
+                        "enable_translation": "True" if self.translate else "False",
                     }
                 )
 
@@ -124,11 +120,9 @@ class TranscriptionWorkerAPI(QThread):
                                 continue
 
                             # Process normal segment
-                            segment["start_time"] = round(
-                                segment.get("start_time", 0), 3
-                            )
-                            segment["end_time"] = round(segment.get("end_time", 0), 3)
-                            text = f"[{segment['start_time']} - {segment['end_time']}] {segment['text']}\n"
+                            segment["start"] = round(segment.get("start", 0), 3)
+                            segment["end"] = round(segment.get("end", 0), 3)
+                            text = f"[{segment['start']} - {segment['end']}] {segment['text']}\n"
 
                             with self.lock:
                                 with open(

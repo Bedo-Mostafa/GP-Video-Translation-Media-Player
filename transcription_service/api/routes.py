@@ -4,23 +4,23 @@ import os
 import shutil
 import threading
 import uuid
-from queue import Queue
+from queue import Empty as QueueEmpty
 
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, JSONResponse
 
 from .constants import STOP_SIGNAL
-from .processor import VideoProcessor
+from .VideoProcessor import VideoProcessor
 from ..transcription.translator import Translator
 from ..config.context import ProcessingContext
-from ..config.transcription_config import TranscriptionConfig
 from ..models.model_loader import load_translation_model
 from ..utils.aspect import performance_log
+from ..utils.logging_config import get_processor_logger
+
+logger = get_processor_logger()
 
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):
-    """Define API routes for health check, transcription, cleanup, and cancellation."""
-
     @app.get("/health")
     async def health_check():
         return JSONResponse(content={"status": "ok"}, status_code=200)
@@ -29,55 +29,100 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
     @performance_log
     async def transcribe_video_streaming(
         file: UploadFile = File(...),
-        model_name: str = Form("small"),
-        max_workers: int = Form(2),
-        min_silence_duration: float = Form(0.7),
-        silence_threshold: int = Form(-35),
-        language: bool = Form(False),
+        enable_translation: bool = Form(False),  # Changed from 'language'
     ):
         task_id = str(uuid.uuid4())
-        output_folder = f"temp/{task_id}"
+        output_folder = f"temp/{task_id}"  # For initial video save
         os.makedirs(output_folder, exist_ok=True)
         temp_file_path = f"{output_folder}/input_video.mp4"
 
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        processor.segment_queues[task_id] = Queue()
-        config = TranscriptionConfig(
-            model_name, max_workers, min_silence_duration, silence_threshold
-        )
+        client_output_queue, _ = processor.task_manager.register_task(task_id)
+
         context = ProcessingContext(task_id, temp_file_path, output_folder)
 
         threading.Thread(
             target=processor.process_video_with_streaming,
-            args=(context, config, language, translator),
+            args=(
+                context,
+                enable_translation,
+                translator,
+            ),
             daemon=True,
         ).start()
 
         async def stream_transcription_results():
-            queue = processor.segment_queues[task_id]
+            # [ Stream consumption logic from previous routes.py is largely okay ]
+            # It reads from client_output_queue and sends JSON lines.
+            # Ensure it handles STOP_SIGNAL and potential error dicts correctly.
             try:
                 while True:
-                    if processor.cancel_events.get(task_id, threading.Event()).is_set():
-                        print(f"Task {task_id} canceled. Stopping stream.")
+                    if processor.task_manager.is_cancelled(task_id):
+                        logger.info(
+                            f"Task {task_id} cancelled by server. Stopping client stream."
+                        )
                         yield json.dumps(
-                            {"status": "cancelled", "message": "Task cancelled by user"}
+                            {
+                                "status": "cancelled",
+                                "message": "Task cancelled by server",
+                            }
                         ) + "\n"
                         break
                     try:
-                        result = queue.get(timeout=0.1)
+                        result = client_output_queue.get(
+                            timeout=0.1
+                        )  # Timeout to check cancellation
+
                         if result is STOP_SIGNAL:
+                            logger.info(
+                                f"Task {task_id} (ClientStream): Received STOP_SIGNAL. Ending stream."
+                            )
                             break
+
                         yield json.dumps(result) + "\n"
-                        await asyncio.sleep(0)
-                    except Exception:
+                        if isinstance(result, dict) and result.get("status") in [
+                            "error",
+                            "cancelled",
+                        ]:
+                            logger.info(
+                                f"Task {task_id} (ClientStream): Stream ending due to status: {result['status']}"
+                            )
+                            break
+
+                        await asyncio.sleep(
+                            0
+                        )  # Yield control for other async tasks in FastAPI
+                    except QueueEmpty:
                         await asyncio.sleep(0.1)
+                    except Exception as e:
+                        logger.error(
+                            f"Error streaming transcription results for task {task_id}: {e}",
+                            exc_info=True,
+                        )
+                        try:
+                            yield json.dumps(
+                                {
+                                    "status": "error",
+                                    "message": "Streaming error occurred on server",
+                                }
+                            ) + "\n"
+                        except Exception as send_err:
+                            logger.error(
+                                f"Failed to send streaming error to client for task {task_id}: {send_err}"
+                            )
+                        break
             finally:
-                # Ensure we clean up resources if the client disconnects
-                if task_id in processor.cancel_events:
-                    processor.cancel_events[task_id].set()
-                print(f"Stream for task {task_id} ended")
+                logger.info(
+                    f"Stream for task {task_id} ended on server side (routes.py)."
+                )
+                # If stream ends prematurely (e.g. client disconnect), try to cancel the backend task.
+                if not processor.task_manager.is_cancelled(task_id):
+                    logger.warning(
+                        f"Client for task {task_id} likely disconnected or stream ended. Initiating task cancellation."
+                    )
+                    processor.task_manager.cancel_task(task_id)
 
         return StreamingResponse(
             stream_transcription_results(),
@@ -87,54 +132,52 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
 
     @app.post("/cancel/{task_id}")
     @performance_log
-    async def cancel_task(task_id: str):
+    async def cancel_task_endpoint(task_id: str):
         try:
-            if task_id in processor.cancel_events:
-                # Set the cancellation event
-                processor.cancel_events[task_id].set()
-
-                # Add a small delay to ensure the event is recognized
-                await asyncio.sleep(0.1)
-
-                # Put a message in the queue to indicate cancellation
-                if task_id in processor.segment_queues:
-                    processor.segment_queues[task_id].put(
-                        {"status": "cancelled", "message": "Task cancelled by user"}
-                    )
-
-                return {"message": f"Task {task_id} cancellation initiated."}
-            return {"error": f"Task {task_id} not found."}, 404
+            logger.info(f"Received cancellation request for task {task_id} via API.")
+            processor.task_manager.cancel_task(task_id)
+            await asyncio.sleep(0.1)
+            return {"message": f"Task {task_id} cancellation initiated."}
         except Exception as e:
+            logger.error(f"Error cancelling task {task_id} via API: {str(e)}")
             return {"error": f"Error cancelling task: {str(e)}"}, 500
 
     @app.delete("/cleanup/{task_id}")
     @performance_log
-    async def cleanup_task(task_id: str):
+    async def cleanup_task_endpoint(task_id: str):
         try:
-            # Make sure the task is cancelled first
-            if task_id in processor.cancel_events:
-                processor.cancel_events[task_id].set()
-                # Small delay to ensure cancellation is processed
-                await asyncio.sleep(0.1)
+            logger.info(f"Received cleanup request for task {task_id} via API.")
+            # Ensure task is marked for cancellation so threads can exit
+            if not processor.task_manager.is_cancelled(task_id):
+                processor.task_manager.cancel_task(task_id)
+                await asyncio.sleep(0.2)  # Give a moment for event to propagate
 
-            # Clean up resources
+            # Forcibly clean output folder if it still exists (VideoProcessor might have cleaned it)
             output_folder = f"temp/{task_id}"
             if os.path.exists(output_folder):
-                shutil.rmtree(output_folder)
+                try:
+                    shutil.rmtree(output_folder)
+                    logger.info(
+                        f"Removed output folder {output_folder} for task {task_id} via cleanup endpoint."
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Error removing output folder {output_folder} in cleanup endpoint: {e}"
+                    )
 
-            # Remove from queues
-            processor.segment_queues.pop(task_id, None)
+            # Call task_manager.cleanup_task again as a final measure,
+            # though VideoProcessor should have called it.
+            processor.task_manager.cleanup_task(task_id)
 
-            # Clean up cancel event
-            with processor.cancel_events_lock:
-                processor.cancel_events.pop(task_id, None)
-
-            return {"message": f"Task {task_id} cleaned up successfully"}
+            return {"message": f"Task {task_id} cleanup process initiated/verified."}
         except Exception as e:
+            logger.error(f"Error cleaning up task {task_id} via API: {str(e)}")
             return {"error": f"Error cleaning up task: {str(e)}"}, 500
 
     @app.on_event("startup")
     @performance_log
     async def startup_event():
         os.makedirs("temp", exist_ok=True)
+        logger.info("Loading translation model on startup...")
         translator.nmt_model, translator.tokenizer = load_translation_model()
+        logger.info("Translation model loaded.")
