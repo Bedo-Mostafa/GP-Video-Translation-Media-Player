@@ -18,7 +18,7 @@ def transcribe_segment(
         segments, _ = model.transcribe(
             audio_input,
             language="en",
-            beam_size=5,
+            beam_size=1,
             no_speech_threshold=0.5,
             word_timestamps=True,
         )
