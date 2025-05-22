@@ -32,14 +32,13 @@ class VideoProcessor:
         self.model_manager = ModelManager()
         self.audio_processor = AudioPreprocessor()  # Simplified preprocessor
         self.task_manager = TaskManager()
-        # self.segment_processor is removed
         logger.info("VideoProcessor initialized (Simplified Streaming Pipeline)")
 
     def _transcription_producer_worker(
         self,
         raw_audio_np: np.ndarray,
         sample_rate: int,
-        whisper_model: Any,  # FasterWhisper model instance
+        whisper_model: Any,
         target_queue: Queue,
         task_id: str,
         cancel_event: threading.Event,
@@ -65,25 +64,28 @@ class VideoProcessor:
                 )
                 return
 
+            audio_duration = len(raw_audio_np) / sample_rate
+
             logger.info(
-                f"Task {task_id} (Transcription): Calling `transcribe_segment`..."
+                f"Task {task_id} (Transcription): Streaming transcription with `transcribe_segment`..."
             )
 
-            # Use entire audio segment here (start_time = 0, end_time = duration)
-            audio_duration = len(raw_audio_np) / sample_rate
-            segments = transcribe_segment(
+            for segment in transcribe_segment(
                 model=whisper_model,
                 audio_input=raw_audio_np,
                 start_time=0.0,
                 end_time=audio_duration,
-            )
-
-            for segment in segments:
+            ):
                 if cancel_event.is_set():
                     logger.info(
                         f"Task {task_id} (Transcription): Cancellation detected. Stopping."
                     )
                     break
+
+                logger.info(
+                    f"Task {task_id} (Transcription): Segment {segment_idx_counter}: "
+                    f"start={segment['start']}, end={segment['end']}, text='{segment['text'][:50]}...'"
+                )
 
                 segment_data = {
                     "text": segment["text"],
