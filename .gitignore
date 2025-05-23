@@ -9,6 +9,9 @@ temp/
 # Ignore Log Files
 *.txt
 
+# ignore Subtitle Files
+*.srt
+
 # C extensions
 *.so
 
