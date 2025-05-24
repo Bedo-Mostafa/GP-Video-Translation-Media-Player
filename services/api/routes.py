@@ -1,9 +1,9 @@
-import asyncio
-import json
-import os
-import shutil
-import threading
-import uuid
+from asyncio import sleep
+from json import dumps
+from os import makedirs, path
+from shutil import rmtree, copyfileobj
+from threading import Thread
+from uuid import uuid4
 from queue import Empty as QueueEmpty
 
 from fastapi import FastAPI, UploadFile, File, Form
@@ -31,19 +31,19 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         file: UploadFile = File(...),
         enable_translation: bool = Form(False),  # Changed from 'language'
     ):
-        task_id = str(uuid.uuid4())
+        task_id = str(uuid4())
         output_folder = f"temp/{task_id}"  # For initial video save
-        os.makedirs(output_folder, exist_ok=True)
+        makedirs(output_folder, exist_ok=True)
         temp_file_path = f"{output_folder}/input_video.mp4"
 
         with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            copyfileobj(file.file, buffer)
 
         client_output_queue, _ = processor.task_manager.register_task(task_id)
 
         context = ProcessingContext(task_id, temp_file_path, output_folder)
 
-        threading.Thread(
+        Thread(
             target=processor.process_video_with_streaming,
             args=(
                 context,
@@ -63,7 +63,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
                         logger.info(
                             f"Task {task_id} cancelled by server. Stopping client stream."
                         )
-                        yield json.dumps(
+                        yield dumps(
                             {
                                 "status": "cancelled",
                                 "message": "Task cancelled by server",
@@ -81,7 +81,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
                             )
                             break
 
-                        yield json.dumps(result) + "\n"
+                        yield dumps(result) + "\n"
                         if isinstance(result, dict) and result.get("status") in [
                             "error",
                             "cancelled",
@@ -91,18 +91,16 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
                             )
                             break
 
-                        await asyncio.sleep(
-                            0
-                        )  # Yield control for other async tasks in FastAPI
+                        await sleep(0)  # Yield control for other async tasks in FastAPI
                     except QueueEmpty:
-                        await asyncio.sleep(0.1)
+                        await sleep(0.1)
                     except Exception as e:
                         logger.error(
                             f"Error streaming transcription results for task {task_id}: {e}",
                             exc_info=True,
                         )
                         try:
-                            yield json.dumps(
+                            yield dumps(
                                 {
                                     "status": "error",
                                     "message": "Streaming error occurred on server",
@@ -136,7 +134,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         try:
             logger.info(f"Received cancellation request for task {task_id} via API.")
             processor.task_manager.cancel_task(task_id)
-            await asyncio.sleep(0.1)
+            await sleep(0.1)
             return {"message": f"Task {task_id} cancellation initiated."}
         except Exception as e:
             logger.error(f"Error cancelling task {task_id} via API: {str(e)}")
@@ -150,13 +148,13 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
             # Ensure task is marked for cancellation so threads can exit
             if not processor.task_manager.is_cancelled(task_id):
                 processor.task_manager.cancel_task(task_id)
-                await asyncio.sleep(0.2)  # Give a moment for event to propagate
+                await sleep(0.2)  # Give a moment for event to propagate
 
             # Forcibly clean output folder if it still exists (VideoProcessor might have cleaned it)
             output_folder = f"temp/{task_id}"
-            if os.path.exists(output_folder):
+            if path.exists(output_folder):
                 try:
-                    shutil.rmtree(output_folder)
+                    rmtree(output_folder)
                     logger.info(
                         f"Removed output folder {output_folder} for task {task_id} via cleanup endpoint."
                     )
@@ -177,7 +175,7 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
     @app.on_event("startup")
     @performance_log
     async def startup_event():
-        os.makedirs("temp", exist_ok=True)
+        makedirs("temp", exist_ok=True)
         logger.info("Loading translation model on startup...")
         translator.nmt_model, translator.tokenizer = load_translation_model()
         logger.info("Translation model loaded.")

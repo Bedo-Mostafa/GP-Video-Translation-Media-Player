@@ -1,4 +1,4 @@
-import subprocess
+from subprocess import CalledProcessError, Popen, run, PIPE
 import numpy as np
 from typing import Optional
 
@@ -23,11 +23,11 @@ def get_video_duration(video_path: str) -> float:
         video_path,
     ]
     try:
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, check=True)
+        result = run(cmd, stdout=PIPE, text=True, check=True)
         duration = float(result.stdout.strip())
         logger.debug(f"Video duration: {duration} seconds")
         return duration
-    except subprocess.CalledProcessError as e:
+    except CalledProcessError as e:
         logger.error(f"FFprobe failed: {e.stderr}")
         raise
     except FileNotFoundError:
@@ -63,9 +63,7 @@ def extract_raw_audio_to_numpy(
         "pipe:1",  # Output to stdout
     ]
     try:
-        process = subprocess.Popen(
-            extract_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+        process = Popen(extract_cmd, stdout=PIPE, stderr=PIPE)
         stdout, stderr = process.communicate()
 
         if process.returncode != 0:

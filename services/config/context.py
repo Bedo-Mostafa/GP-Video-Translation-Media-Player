@@ -1,6 +1,6 @@
 from services.audio.audio_processing import get_video_duration
-import numpy as np  # Added for type hinting
-from typing import Optional  # Added for type hinting
+from numpy import ndarray
+from typing import Optional
 
 
 class ProcessingContext:
@@ -18,7 +18,7 @@ class ProcessingContext:
         # or by the batch processing path if it's not fully using in-memory data.
 
         # New attributes for in-memory audio processing
-        self.audio_data_np: Optional[np.ndarray] = None
+        self.audio_data_np: Optional[ndarray] = None
         self.sample_rate: Optional[int] = None
 
     def get_video_duration(self) -> float:

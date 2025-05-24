@@ -1,8 +1,8 @@
-import threading
-import os
-import atexit
-import shutil
-import uvicorn
+from threading import Thread
+from os import path, makedirs
+from atexit import register
+from shutil import rmtree
+from uvicorn import Config, Server
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -40,7 +40,7 @@ class TranscriptionServer:
         setup_routes(self.app, self.processor, self.translator)
 
         # Register cleanup handler
-        atexit.register(self.cleanup)
+        register(self.cleanup)
 
         logger.info("TranscriptionServer initialized")
 
@@ -62,9 +62,9 @@ class TranscriptionServer:
                 logger.warning(f"Port {self.port} in use, trying next...")
                 self.port += 1
 
-            os.makedirs("temp", exist_ok=True)  # Ensures temp dir for uploads
+            makedirs("temp", exist_ok=True)  # Ensures temp dir for uploads
 
-            self.server_thread = threading.Thread(target=self.run_api, daemon=True)
+            self.server_thread = Thread(target=self.run_api, daemon=True)
             self.server_thread.start()
             logger.info(f"Server started at http://{self.host}:{self.port}")
         else:  #
@@ -72,10 +72,10 @@ class TranscriptionServer:
 
     def run_api(self):  #
         """Run the Uvicorn server."""
-        config = uvicorn.Config(
+        config = Config(
             self.app, host=self.host, port=self.port, log_level="info"
         )
-        self.uvicorn_server = uvicorn.Server(config)  # Store server instance
+        self.uvicorn_server = Server(config)  # Store server instance
         try:
             # uvicorn.run(self.app, host=self.host, port=self.port, log_level="info") # Original
             self.uvicorn_server.run()  # Use server instance run
@@ -129,8 +129,8 @@ class TranscriptionServer:
         # Remove temporary files directory
         try:
             temp_dir_path = "temp"
-            if os.path.exists(temp_dir_path):
-                shutil.rmtree(temp_dir_path)
+            if path.exists(temp_dir_path):
+                rmtree(temp_dir_path)
                 logger.info(f"Removed temporary directory: {temp_dir_path}")
         except Exception as e:
             logger.error(f"Error cleaning up temporary files: {e}")

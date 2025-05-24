@@ -1,7 +1,7 @@
-import os
-import shutil
-import threading
-import numpy as np
+from os import path
+from shutil import rmtree
+from threading import Thread, Event
+from numpy import ndarray
 from queue import Empty, Queue, Full as QueueFull
 from typing import Optional, Any
 
@@ -34,12 +34,12 @@ class VideoProcessor:
 
     def _transcription_producer_worker(
         self,
-        raw_audio_np: np.ndarray,
+        raw_audio_np: ndarray,
         sample_rate: int,
         whisper_model: Any,
         target_queue: Queue,
         task_id: str,
-        cancel_event: threading.Event,
+        cancel_event: Event,
     ):
         segment_idx_counter = 0
         try:
@@ -123,7 +123,7 @@ class VideoProcessor:
         input_queue: Queue,  # Consumes from transcription_queue
         output_queue: Queue,  # Produces to client_output_queue
         task_id: str,
-        cancel_event: threading.Event,
+        cancel_event: Event,
     ):
         try:
             while True:
@@ -219,7 +219,7 @@ class VideoProcessor:
                     maxsize=DEFAULT_TRANSCRIPTION_QUEUE_SIZE
                 )
 
-                transcription_thread = threading.Thread(
+                transcription_thread = Thread(
                     target=self._transcription_producer_worker,
                     args=(
                         context.audio_data_np,
@@ -231,7 +231,7 @@ class VideoProcessor:
                     ),
                     daemon=True,
                 )
-                translator_thread = threading.Thread(
+                translator_thread = Thread(
                     target=self._translation_consumer_producer_worker,
                     args=(
                         translator,
@@ -249,7 +249,7 @@ class VideoProcessor:
                 translator_thread.start()
             else:
                 # Transcription -> Client Output Queue
-                transcription_thread = threading.Thread(
+                transcription_thread = Thread(
                     target=self._transcription_producer_worker,
                     args=(
                         context.audio_data_np,
@@ -364,9 +364,9 @@ class VideoProcessor:
     @staticmethod
     def _cleanup_output_folder(output_folder: str) -> None:
         # [Code from your existing VideoProcessor.py - unchanged]
-        if os.path.exists(output_folder):
+        if path.exists(output_folder):
             try:
-                shutil.rmtree(output_folder)
+                rmtree(output_folder)
                 logger.info(f"Successfully removed output folder: {output_folder}")
             except Exception as e:
                 logger.error(f"Error removing output folder {output_folder}: {e}")

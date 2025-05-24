@@ -1,10 +1,19 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QPushButton, QHBoxLayout, QFileDialog,
-    QRadioButton, QTextEdit, QSizePolicy, QButtonGroup
+    QWidget,
+    QVBoxLayout,
+    QLabel,
+    QPushButton,
+    QHBoxLayout,
+    QFileDialog,
+    QRadioButton,
+    QTextEdit,
+    QSizePolicy,
+    QButtonGroup,
 )
 from PySide6.QtGui import QFont, QPixmap, QImage
 from PySide6.QtCore import Qt, QTimer
-import cv2
+
+from cv2 import VideoCapture, cvtColor, COLOR_BGR2RGB
 
 
 class Welcome(QWidget):
@@ -56,8 +65,7 @@ class Welcome(QWidget):
         self.media_button.clicked.connect(self.upload_video)
         self.media_button.setObjectName("Add_Media_Button")
         self.media_button.setFixedHeight(40)
-        self.media_button.setSizePolicy(
-            QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.media_button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         main_layout.addWidget(self.media_button)
 
         # File path display
@@ -101,15 +109,14 @@ class Welcome(QWidget):
             self.start_button.setEnabled(False)
 
     def display_thumbnail(self, video_path):
-        cap = cv2.VideoCapture(video_path)
+        cap = VideoCapture(video_path)
         success, frame = cap.read()
         cap.release()
         if success:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            frame = cvtColor(frame, COLOR_BGR2RGB)
             h, w, ch = frame.shape
             bytes_per_line = ch * w
-            image = QImage(frame.data, w, h, bytes_per_line,
-                           QImage.Format_RGB888)
+            image = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
             pixmap = QPixmap.fromImage(image).scaled(
                 320, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation
             )
@@ -127,9 +134,8 @@ class Welcome(QWidget):
 
     def send_data(self):
         if self.video_path is not None and self.lang_group.checkedButton() is not None:
-            self.main_window.switch_to_scene2(self.video_path, self.is_arabic)
+            self.main_window.switch_to_upload_view(self.video_path, self.is_arabic)
         else:
             # Show warning message for 3 seconds
             self.language_warning.setVisible(True)
-            QTimer.singleShot(
-                3000, lambda: self.language_warning.setVisible(False))
+            QTimer.singleShot(3000, lambda: self.language_warning.setVisible(False))

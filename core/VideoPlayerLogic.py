@@ -8,7 +8,7 @@ from utils.logging_config import setup_logging
 class VideoPlayerLogic(VideoPlayerUI):
     switch_scene_signal = Signal(str)
 
-    def __init__(self, main_window, transcription_server=None):
+    def __init__(self, main_window, transcription_server):
         super().__init__(main_window)
         self.logger = setup_logging()
         self.main_window = main_window
@@ -30,6 +30,7 @@ class VideoPlayerLogic(VideoPlayerUI):
             self.updateSubtitlePosition,
             self.timer,
         )
+
         self._setup_connections()
         self.audio_output.setVolume(0.5)
         self.media_controller.update_volume_icon(50)
@@ -40,7 +41,7 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.rewind_button.clicked.connect(self.rewind_video)
         self.forward_button.clicked.connect(self.forward_video)
         self.cancel_button.clicked.connect(self.cancel_transcription)
-        self.switch_scene_signal.connect(self.main_window.switch_to_scene1)
+        self.switch_scene_signal.connect(self.main_window.switch_to_welcome_view)
         self.media_player.positionChanged.connect(self.update_time_label)
         self.media_player.durationChanged.connect(self.update_time_label)
 
@@ -53,9 +54,13 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.subtitle_manager.load_initial_transcription()
         QTimer.singleShot(100, self.updateSceneRect)
         QTimer.singleShot(500, self.updateSceneRect)
+        if self.transcription_worker:
+            self.transcription_worker.finished.connect(
+                self.subtitle_manager.set_transcription_complete
+            )
 
     def cancel_transcription(self):
-        """Cancel transcription and switch to scene 1."""
+        """Cancel transcription and switch to scene 1 after cleanup."""
         self.logger.info("Cancelling transcription and switching to scene 1")
         self.media_controller.stop()
         if self.transcription_worker:
@@ -63,21 +68,26 @@ class VideoPlayerLogic(VideoPlayerUI):
             self.transcription_worker.wait()
             self.logger.info("Transcription worker stopped")
         self.task_id = None
+        if self.transcription_server:
+            self.transcription_server.cleanup()
+            self.logger.info("Transcription server cleaned up")
         self.switch_scene_signal.emit("Cancelled")
 
     def rewind_video(self):
         """Rewind video by 5 seconds."""
         position = self.media_player.position()
-        self.media_player.setPosition(max(0, position - 5000))
         self.showBuffering(True)
+        self.media_player.setPosition(max(0, position - 5000))
+        self.showBuffering(False)
         self.logger.debug("Rewinded video by 5 seconds")
 
     def forward_video(self):
         """Fast forward video by 5 seconds."""
         position = self.media_player.position()
         duration = self.media_player.duration()
-        self.media_player.setPosition(min(duration, position + 5000))
         self.showBuffering(True)
+        self.media_player.setPosition(min(duration, position + 5000))
+        self.showBuffering(False)
         self.logger.debug("Fast forwarded video by 5 seconds")
 
     def update_time_label(self):

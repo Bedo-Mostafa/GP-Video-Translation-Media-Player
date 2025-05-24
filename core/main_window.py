@@ -8,8 +8,8 @@ from utils.logging_config import setup_logging
 
 
 class MainWindow(QMainWindow):
-    SCENE1_INDEX = 0
-    SCENE2_INDEX = 1
+    VIEW1_INDEX = 0
+    VIEW2_INDEX = 1
     VIDEO_PLAYER_INDEX = 2
 
     def __init__(self):
@@ -20,13 +20,14 @@ class MainWindow(QMainWindow):
         self.resize(800, 600)
         self.stacked_widget = QStackedWidget()
         self.setCentralWidget(self.stacked_widget)
-        self.scene1 = Welcome(self)
-        self.scene2 = Upload(self, self.transcription_server)
+        self.welcome_view = Welcome(self)
+        self.upload_view = Upload(self, self.transcription_server)
         self.video_player = VideoPlayerLogic(
-            self, transcription_server=self.transcription_server
+            main_window=self,
+            transcription_server=self.transcription_server,
         )
-        self.stacked_widget.addWidget(self.scene1)
-        self.stacked_widget.addWidget(self.scene2)
+        self.stacked_widget.addWidget(self.welcome_view)
+        self.stacked_widget.addWidget(self.upload_view)
         self.stacked_widget.addWidget(self.video_player)
 
     def closeEvent(self, event: QEvent):
@@ -45,20 +46,20 @@ class MainWindow(QMainWindow):
             self.logger.error("Error during cleanup: %s", str(e))
             event.accept()
 
-    def switch_to_scene1(self):
+    def switch_to_welcome_view(self):
         """Switch to Scene1."""
         try:
-            self.stacked_widget.setCurrentIndex(self.SCENE1_INDEX)
+            self.stacked_widget.setCurrentIndex(self.VIEW1_INDEX)
             self.logger.info("Switched to Scene1")
         except Exception as e:
             self.logger.error("Error switching to Scene1: %s", str(e))
 
-    def switch_to_scene2(self, path, language):
+    def switch_to_upload_view(self, path, language):
         """Switch to Scene2 and start transcription."""
         try:
-            self.scene2.reset_scene()
-            self.scene2.transcript(path, language)
-            self.stacked_widget.setCurrentIndex(self.SCENE2_INDEX)
+            self.upload_view.reset_scene()
+            self.upload_view.transcript(path, language)
+            self.stacked_widget.setCurrentIndex(self.VIEW2_INDEX)
             self.logger.info(
                 "Switched to Scene2 with video: %s, language: %s", path, language
             )
@@ -68,7 +69,7 @@ class MainWindow(QMainWindow):
     def switch_to_video_player(self, path, language):
         """Switch to VideoPlayer and load the video."""
         try:
-            self.video_player.task_id = self.scene2.transcription_worker.task_id
+            self.video_player.task_id = self.upload_view.transcription_worker.task_id
             self.video_player.load_video(path, language)
             self.stacked_widget.setCurrentIndex(self.VIDEO_PLAYER_INDEX)
             self.logger.info(
@@ -76,7 +77,3 @@ class MainWindow(QMainWindow):
             )
         except Exception as e:
             self.logger.error("Error switching to VideoPlayer: %s", str(e))
-
-    def get_current_scene_index(self):
-        """Return the index of the currently displayed scene."""
-        return self.stacked_widget.currentIndex()

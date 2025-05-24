@@ -1,4 +1,5 @@
-import requests
+from requests import get, post, delete
+from requests.exceptions import RequestException, ConnectionError, Timeout
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 from utils.config import (
     API_BASE_URL,
@@ -7,8 +8,8 @@ from utils.config import (
     SERVER_HEALTH_CHECK_TIMEOUT,
     SERVER_START_MAX_ATTEMPTS,
 )
-import time
-import os
+from time import sleep
+from os import path
 from utils.logging_config import setup_logging
 
 
@@ -30,14 +31,14 @@ class TranscriptionClient:
         self.transcription_server.start()
         for attempt in range(SERVER_START_MAX_ATTEMPTS):
             try:
-                response = requests.get(
+                response = get(
                     f"{self.api_url}/health", timeout=SERVER_HEALTH_CHECK_TIMEOUT
                 )
                 if response.status_code == 200:
                     self.logger.info("Transcription server is ready")
                     return
-            except requests.exceptions.RequestException:
-                time.sleep(1)
+            except RequestException:
+                sleep(1)
             if attempt == SERVER_START_MAX_ATTEMPTS - 1:
                 raise RuntimeError("Transcription server failed to start")
 
@@ -49,7 +50,7 @@ class TranscriptionClient:
             with open(video_file, "rb") as f:
                 encoder = MultipartEncoder(
                     fields={
-                        "file": (os.path.basename(video_file), f, "video/mp4"),
+                        "file": (path.basename(video_file), f, "video/mp4"),
                         "enable_translation": "True" if enable_translation else "False",
                     }
                 )
@@ -62,7 +63,7 @@ class TranscriptionClient:
 
                 monitor = MultipartEncoderMonitor(encoder, callback)
                 headers = {"Content-Type": monitor.content_type}
-                self.response = requests.post(
+                self.response = post(
                     f"{self.api_url}/transcribe/",
                     data=monitor,
                     headers=headers,
@@ -74,11 +75,11 @@ class TranscriptionClient:
                 if self.response.status_code != 200:
                     raise RuntimeError(f"API Error: {self.response.text}")
                 return task_id, self.response
-        except requests.exceptions.ConnectionError as e:
+        except ConnectionError as e:
             raise RuntimeError(
                 f"Connection error: {str(e)}. Is the server running?"
             ) from e
-        except requests.exceptions.Timeout as e:
+        except Timeout as e:
             raise RuntimeError("Request timed out. Server may be overloaded.") from e
         except Exception as e:
             raise RuntimeError(f"Upload failed: {str(e)}") from e
@@ -86,9 +87,7 @@ class TranscriptionClient:
     def cancel_task(self, task_id):
         """Send cancellation request for a specific task."""
         try:
-            response = requests.post(
-                f"{self.api_url}/cancel/{task_id}", timeout=CANCEL_TIMEOUT
-            )
+            response = post(f"{self.api_url}/cancel/{task_id}", timeout=CANCEL_TIMEOUT)
             if response.status_code == 200:
                 self.logger.info("Task %s cancellation initiated", task_id)
             else:
@@ -101,7 +100,7 @@ class TranscriptionClient:
     def cleanup_task(self, task_id):
         """Send cleanup request for a specific task."""
         try:
-            response = requests.delete(
+            response = delete(
                 f"{self.api_url}/cleanup/{task_id}", timeout=CANCEL_TIMEOUT
             )
             if response.status_code == 200:
