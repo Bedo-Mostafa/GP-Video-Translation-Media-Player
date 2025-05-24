@@ -7,7 +7,7 @@ class ModelConfig:
     """Configuration class for model settings and paths."""
 
     # Base directory for all models
-    models_base_dir: str = "services\models"
+    models_base_dir: str = "machine_models"
 
     # MarianMT model settings
     marianmt_model_name: str = "marianmt_en_ar_distilled"

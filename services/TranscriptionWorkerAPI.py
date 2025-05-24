@@ -121,7 +121,7 @@ class TranscriptionWorkerAPI(QThread):
             self.client.cancel_task(self.task_id)
             self.client.cleanup_task(self.task_id)
         self.client.close_response()
-        self.wait(timeout=5000)
+        self.wait(5000)
         self.logger.info("Transcription worker stopped")
 
     def _cleanup(self):
