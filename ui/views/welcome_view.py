@@ -13,8 +13,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont, QPixmap, QImage
 from PySide6.QtCore import Qt, QTimer
 
-from cv2 import VideoCapture, cvtColor, COLOR_BGR2RGB
-
+from imageio.v3 import imread
 
 class Welcome(QWidget):
     def __init__(self, main_window):
@@ -109,23 +108,28 @@ class Welcome(QWidget):
             self.start_button.setEnabled(False)
 
     def display_thumbnail(self, video_path):
-        cap = VideoCapture(video_path)
-        success, frame = cap.read()
-        cap.release()
-        if success:
-            frame = cvtColor(frame, COLOR_BGR2RGB)
-            h, w, ch = frame.shape
-            bytes_per_line = ch * w
-            image = QImage(frame.data, w, h, bytes_per_line, QImage.Format_RGB888)
-            pixmap = QPixmap.fromImage(image).scaled(
-                320, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self.thumbnail_label.setPixmap(pixmap)
-            self.thumbnail_label.setVisible(True)
-        else:
+        try:
+            frame = imread(video_path, index=0)
+            
+            if len(frame.shape) == 3 and frame.shape[2] == 3:
+                h, w, ch = frame.shape
+                bytes_per_line = ch * w
+                
+                qimage = QImage(frame.data.tobytes(), w, h, bytes_per_line, QImage.Format_RGB888)
+                pixmap = QPixmap.fromImage(qimage).scaled(
+                    320, 180, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
+                
+                self.thumbnail_label.setPixmap(pixmap)
+                self.thumbnail_label.setVisible(True)
+            else:
+                raise ValueError("Invalid frame format")
+                
+        except Exception as e:
+            print(f"Error loading thumbnail: {e}")
             self.thumbnail_label.clear()
             self.thumbnail_label.setVisible(False)
-
+        
     def set_language_selection(self):
         if self.arabic_rb.isChecked():
             self.is_arabic = True
