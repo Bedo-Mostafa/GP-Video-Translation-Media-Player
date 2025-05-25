@@ -1,5 +1,5 @@
 from typing import Dict  # Changed from List, Dict
-import torch
+from torch import no_grad
 
 from services.utils.aspect import performance_log
 from services.utils.logging_config import get_translation_logger  # Optional specific logger
@@ -35,7 +35,7 @@ class Translator:
                 max_length=512,  # Ensure this is appropriate
             ).to(self.nmt_model.device)
 
-            with torch.no_grad():
+            with no_grad():
                 translated_ids = self.nmt_model.generate(
                     **inputs,
                     num_beams=1,  # Faster

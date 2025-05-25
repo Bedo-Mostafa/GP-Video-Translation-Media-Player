@@ -5,6 +5,7 @@ os.environ['PYTHONOPTIMIZE'] = '2'
 
 PyInstaller.__main__.run([
     '--noconfirm',
+    '--onefile',
     '--add-data', 'ui/assets/app-theme.css;.',
     '--add-data', 'ui/assets/animationLoader.html;.',
     '--clean',

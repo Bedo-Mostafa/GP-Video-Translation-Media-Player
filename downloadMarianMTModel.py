@@ -9,11 +9,11 @@
 # # this file will edit to download the optimized translation model that 	gimmeursocks work on it
 # # please hammed give me the model😘
 
-import torch
-torch.cuda.init()
-print(torch.cuda.get_device_capability(0))
-print(torch.cuda.get_device_name(0))
-print("CUDA Available:", torch.cuda.is_available())
-print("CUDA Device:", torch.cuda.get_device_name(
-    0) if torch.cuda.is_available() else "None")
-print("CUDA Version:", torch.version.cuda)
+from torch import cuda, version
+cuda.init()
+print(cuda.get_device_capability(0))
+print(cuda.get_device_name(0))
+print("CUDA Available:", cuda.is_available())
+print("CUDA Device:", cuda.get_device_name(
+    0) if cuda.is_available() else "None")
+print("CUDA Version:", version.cuda)

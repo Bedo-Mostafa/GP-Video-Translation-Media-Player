@@ -3,8 +3,8 @@ import time
 import threading
 from datetime import datetime
 import psutil
-import asyncio
 import os
+from asyncio import create_task, sleep, iscoroutinefunction
 
 
 class PerformanceMetrics:
@@ -147,7 +147,7 @@ def performance_log(func):
 
         try:
             # Start periodic metric updates
-            update_timer = asyncio.create_task(periodic_update(metrics))
+            update_timer = create_task(periodic_update(metrics))
             result = await func(*args, **kwargs)
             update_timer.cancel()
             return result
@@ -185,7 +185,7 @@ def performance_log(func):
         """Periodically update metrics during async execution."""
         while True:
             metrics.update_metrics()
-            await asyncio.sleep(0.1)
+            await sleep(0.1)
 
     def periodic_update_sync(metrics: PerformanceMetrics):
         """Periodically update metrics during sync execution."""
@@ -193,4 +193,4 @@ def performance_log(func):
             metrics.update_metrics()
             time.sleep(0.1)
 
-    return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+    return async_wrapper if iscoroutinefunction(func) else sync_wrapper
