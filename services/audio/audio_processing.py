@@ -10,16 +10,12 @@ logger = get_component_logger("audio_processor")
 
 @performance_log
 def get_video_duration(video_path: str) -> float:
-    # [Code from your existing audio_processing.py - unchanged]
     logger.debug(f"Getting duration for video: {video_path}")
     cmd = [
         "ffprobe",
-        "-v",
-        "error",
-        "-show_entries",
-        "format=duration",
-        "-of",
-        "default=noprint_wrappers=1:nokey=1",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "csv=p=0",
         video_path,
     ]
     try:
@@ -36,7 +32,6 @@ def get_video_duration(video_path: str) -> float:
         )
         raise
 
-
 @performance_log
 def extract_raw_audio_to_numpy(
     video_path: str,
@@ -49,17 +44,15 @@ def extract_raw_audio_to_numpy(
     extract_cmd = [
         "ffmpeg",
         "-y",
-        "-i",
-        video_path,
+        "-threads", "0",
+        "-hwaccel", "auto",
+        "-i", video_path,
         "-vn",  # No video
-        "-acodec",
-        "pcm_s16le",  # Output PCM 16-bit little-endian
-        "-ar",
-        "16000",  # Target sample rate 16kHz (Whisper preferred)
-        "-ac",
-        "1",  # Mono channel
-        "-f",
-        "s16le",  # Output raw s16le PCM
+        "-acodec", "pcm_s16le",  # Output PCM 16-bit little-endian
+        "-ar", "16000",  # Target sample rate 16kHz (Whisper preferred)
+        "-ac", "1",  # Mono channel
+        "-af", "aresample=resampler=soxr", # Use SoXR resampler (faster than default)
+        "-f", "s16le",  # Output raw s16le PCM
         "pipe:1",  # Output to stdout
     ]
     try:
