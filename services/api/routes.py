@@ -15,9 +15,9 @@ from services.transcription.translator import Translator
 from services.config.context import ProcessingContext
 from services.models.model_loader import load_translation_model
 from services.utils.aspect import performance_log
-from services.utils.logging_config import get_processor_logger
+from utils.logging_config import get_component_logger
 
-logger = get_processor_logger()
+logger = get_component_logger("video_processor")
 
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):

@@ -3,9 +3,9 @@ from torch import cuda, float16
 from faster_whisper import WhisperModel
 from transformers import MarianMTModel, MarianTokenizer
 from services.models.model_config import ModelConfig, default_config
-from services.utils.logging_config import get_model_logger
+from utils.logging_config import get_component_logger
 
-logger = get_model_logger()
+logger = get_component_logger("model_loader")
 
 
 def load_translation_model(config: ModelConfig = default_config):

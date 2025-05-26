@@ -5,9 +5,9 @@ from services.audio.audio_processing import extract_raw_audio_to_numpy
 
 from services.config.context import ProcessingContext
 from services.utils.aspect import performance_log
-from services.utils.logging_config import get_processor_logger
+from utils.logging_config import get_component_logger
 
-logger = get_processor_logger()
+logger = get_component_logger("video_processor")
 
 class AudioPreprocessor:
     """Simplified audio preprocessor, mainly for raw audio extraction."""

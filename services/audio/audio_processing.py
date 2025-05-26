@@ -3,9 +3,9 @@ import numpy as np
 from typing import Optional
 
 from services.utils.aspect import performance_log
-from services.utils.logging_config import get_audio_logger
+from utils.logging_config import get_component_logger
 
-logger = get_audio_logger()
+logger = get_component_logger("audio_processor")
 
 
 @performance_log

@@ -1,9 +1,9 @@
 from services.utils.aspect import performance_log
 from services.models.model_config import ModelConfig
 from services.models.model_loader import load_whisper_model
-from services.utils.logging_config import get_processor_logger
+from utils.logging_config import get_component_logger
 
-logger = get_processor_logger()
+logger = get_component_logger("video_processor")
 
 
 class ModelManager:

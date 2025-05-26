@@ -17,9 +17,9 @@ from services.models.model_config import default_config
 from services.utils.aspect import performance_log
 from services.transcription.transcriber import transcribe_segment
 from services.transcription.translator import Translator
-from services.utils.logging_config import get_processor_logger
+from utils.logging_config import get_component_logger
 
-logger = get_processor_logger()
+logger = get_component_logger("video_processor")
 
 
 DEFAULT_TRANSCRIPTION_QUEUE_SIZE = 50

@@ -1,5 +1,5 @@
 from services.api.constants import STOP_SIGNAL
-from services.utils.logging_config import get_processor_logger
+from utils.logging_config import get_component_logger
 
 
 import threading
@@ -7,7 +7,7 @@ from queue import Full as QueueFull, Queue
 from typing import Tuple
 
 DEFAULT_OUTPUT_QUEUE_SIZE = 100  # Final client output queue size (used by TaskManager)
-logger = get_processor_logger()
+logger = get_component_logger("video_processor")
 
 
 class TaskManager:

@@ -10,9 +10,9 @@ from services.api.VideoProcessor import VideoProcessor
 from services.api.routes import setup_routes
 from services.transcription.translator import Translator
 from services.utils.network import is_port_available
-from services.utils.logging_config import get_processor_logger
+from utils.logging_config import get_component_logger
 
-logger = get_processor_logger()
+logger = get_component_logger("video_processor")
 
 
 class TranscriptionServer:

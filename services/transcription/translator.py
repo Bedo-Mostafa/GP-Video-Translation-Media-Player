@@ -3,9 +3,9 @@ from torch import no_grad, amp
 from contextlib import nullcontext
 
 from services.utils.aspect import performance_log
-from services.utils.logging_config import get_translation_logger  # Optional specific logger
+from utils.logging_config import get_component_logger
 
-logger = get_translation_logger()  # Using a specific logger if available
+logger = get_component_logger("translation")  # Using a specific logger if available
 
 def get_autocast(device_type):
     return amp.autocast(device_type=device_type) if device_type == "cuda" else nullcontext()
