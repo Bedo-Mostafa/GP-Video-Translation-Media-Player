@@ -10,7 +10,7 @@ class ModelConfig:
     models_base_dir: str = "machine_models"
 
     # MarianMT model settings
-    marianmt_model_name: str = "marianmt_en_ar_distilled"
+    marianmt_model_name: str = "marian_en_ar_distilled_f16"
 
     # Whisper model settings
     whisper_model_name: str = "small"

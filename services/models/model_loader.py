@@ -1,5 +1,5 @@
 from os import path
-from torch import cuda
+from torch import cuda, float16
 from faster_whisper import WhisperModel
 from transformers import MarianMTModel, MarianTokenizer
 from services.models.model_config import ModelConfig, default_config
@@ -29,7 +29,7 @@ def load_translation_model(config: ModelConfig = default_config):
         tokenizer = MarianTokenizer.from_pretrained(model_path)
 
         logger.debug("Loading MarianMT model...")
-        nmt_model = MarianMTModel.from_pretrained(model_path)
+        nmt_model = MarianMTModel.from_pretrained(model_path, torch_dtype=float16)
 
         device = config.device or ("cuda" if cuda.is_available() else "cpu")
         logger.info(f"Using device: {device}")
