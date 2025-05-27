@@ -2,7 +2,7 @@ from os import path, remove
 from PySide6.QtCore import QThread, Signal
 from json import loads, JSONDecodeError
 from filelock import FileLock
-from utils.config import TRANSCRIPT_FILE, TRANSCRIPT_LOCK_FILE
+from utils.config import get_transcript_file, get_transcript_lock_file
 from services.TranscriptionClient import TranscriptionClient
 from utils.logging_config import setup_logging
 
@@ -23,7 +23,7 @@ class TranscriptionWorkerAPI(QThread):
         self.client = TranscriptionClient(self.server_port, transcription_server)
         self.task_id = None
         self._is_running = True
-        self.lock = FileLock(TRANSCRIPT_LOCK_FILE)
+        self.lock = FileLock(get_transcript_lock_file())
         self.segment_counter = 0
 
     def run(self):
@@ -93,15 +93,17 @@ class TranscriptionWorkerAPI(QThread):
 
     def _prepare_transcription_file(self):
         """Delete existing transcription file if it exists."""
-        if path.exists(TRANSCRIPT_FILE):
-            remove(TRANSCRIPT_FILE)
-            self.logger.info("Deleted existing transcription file: %s", TRANSCRIPT_FILE)
+        transcript_file = get_transcript_file()
+        if path.exists(transcript_file):
+            remove(transcript_file)
+            self.logger.info("Deleted existing transcription file: %s", transcript_file)
         self.segment_counter = 0
 
     def _save_segment(self, text):
         """Save a transcription segment to file."""
+        transcript_file = get_transcript_file()
         with self.lock:
-            with open(TRANSCRIPT_FILE, "a", encoding="utf-8") as f:
+            with open(transcript_file, "a", encoding="utf-8") as f:
                 f.write(text)
                 f.flush()
             self.logger.debug("Saved SRT transcription segment: %s", text.strip())

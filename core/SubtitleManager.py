@@ -2,8 +2,8 @@ from filelock import FileLock, Timeout
 from PySide6.QtMultimedia import QMediaPlayer
 from services.TranscriptionWorkerAPI import TranscriptionWorkerAPI
 from utils.config import (
-    TRANSCRIPT_FILE,
-    TRANSCRIPT_LOCK_FILE,
+    get_transcript_file,
+    get_transcript_lock_file,
     SUBTITLE_UPDATE_INTERVAL,
 )
 from utils.logging_config import setup_logging
@@ -38,12 +38,13 @@ class SubtitleManager:
 
     def load_initial_transcription(self):
         """Load initial transcription from file."""
+        transcript_file = get_transcript_file()
         try:
-            if path.exists(TRANSCRIPT_FILE):
-                with open(TRANSCRIPT_FILE, "r", encoding="utf-8") as f:
+            if path.exists(transcript_file):
+                with open(transcript_file, "r", encoding="utf-8") as f:
                     self.parse_srt_transcription(f.read())
                 self.logger.info(
-                    "Loaded initial SRT transcription from %s", TRANSCRIPT_FILE
+                    "Loaded initial SRT transcription from %s", transcript_file
                 )
         except Exception as e:
             self.logger.error("Error reading initial transcription: %s", str(e))
@@ -186,12 +187,14 @@ class SubtitleManager:
 
     def refresh_transcription(self):
         """Refresh transcription from file."""
+        transcript_file = get_transcript_file()
+        transcript_lock_file = get_transcript_lock_file()
         try:
-            if not path.exists(TRANSCRIPT_FILE):
+            if not path.exists(transcript_file):
                 return
-            lock = FileLock(TRANSCRIPT_LOCK_FILE, timeout=0.5)
+            lock = FileLock(transcript_lock_file, timeout=0.5)
             with lock:
-                with open(TRANSCRIPT_FILE, "r", encoding="utf-8") as f:
+                with open(transcript_file, "r", encoding="utf-8") as f:
                     self.parse_srt_transcription(f.read())
         except Timeout:
             self.logger.warning(

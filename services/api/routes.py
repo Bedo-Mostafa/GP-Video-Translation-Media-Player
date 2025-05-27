@@ -19,6 +19,10 @@ from utils.logging_config import get_component_logger
 
 logger = get_component_logger("video_processor")
 
+context = None
+
+def get_context():
+    return context
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):
     @app.get("/health")
@@ -41,8 +45,9 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
 
         client_output_queue, _ = processor.task_manager.register_task(task_id)
 
+        global context
         context = ProcessingContext(task_id, temp_file_path, output_folder)
-
+        
         Thread(
             target=processor.process_video_with_streaming,
             args=(
