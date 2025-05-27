@@ -35,6 +35,7 @@ def get_video_duration(video_path: str) -> float:
 @performance_log
 def extract_raw_audio_to_numpy(
     video_path: str,
+    start_time: float = 0.0,
 ) -> tuple[Optional[np.ndarray], Optional[int]]:
     """
     Extracts raw audio from a video file using ffmpeg and returns it as a NumPy array.
@@ -46,6 +47,7 @@ def extract_raw_audio_to_numpy(
         "-y",
         "-threads", "0",
         "-hwaccel", "auto",
+        "-ss", str(start_time),
         "-i", video_path,
         "-vn",  # No video
         "-acodec", "pcm_s16le",  # Output PCM 16-bit little-endian
@@ -83,61 +85,4 @@ def extract_raw_audio_to_numpy(
         raise
     except Exception as e:
         logger.error(f"Error extracting raw audio to NumPy: {str(e)}", exc_info=True)
-        return None, None
-
-@performance_log
-def extract_raw_audio_seek_to_numpy(
-    video_path: str,
-    start_time: float = 0.0,
-) -> tuple[Optional[np.ndarray], Optional[int]]:
-    """
-    Extract only a segment of audio - much faster for long videos.
-    
-    Args:
-        video_path: Path to video file
-        start_time: Start time in seconds
-        duration: Duration in seconds (None = to end)
-    """
-    logger.info(f"Extracting audio segment from {start_time}s till end")
-    
-    extract_cmd = [
-        "ffmpeg",
-        "-y",
-        "-threads", "0",
-        "-hwaccel", "auto",
-        "-ss", str(start_time),  # Seek to start time (fast seek)
-        "-i", video_path,
-        "-vn",
-        "-acodec", "pcm_s16le",
-        "-ar", "16000",
-        "-ac", "1",
-        "-f", "s16le",
-        "pipe:1"
-    ]
-
-    try:
-        process = Popen(extract_cmd, stdout=PIPE, stderr=PIPE)
-        stdout, stderr = process.communicate()
-
-        if process.returncode != 0:
-            logger.error(
-                f"FFmpeg failed during precise audio segment extraction: {stderr.decode()}"
-            )
-            return None, None
-
-        audio_data_int16 = np.frombuffer(stdout, dtype=np.int16)
-        audio_data_float32 = audio_data_int16.astype(np.float32) / 32768.0
-        sample_rate = 16000
-
-        logger.info(
-            f"Precise audio segment extracted. Shape: {audio_data_float32.shape}, SR: {sample_rate}Hz"
-        )
-        return audio_data_float32, sample_rate
-    except FileNotFoundError:
-        logger.error(
-            "FFmpeg not found. Please ensure FFmpeg is installed and added to your PATH."
-        )
-        raise
-    except Exception as e:
-        logger.error(f"Error extracting precise audio segment: {str(e)}", exc_info=True)
         return None, None
