@@ -3,7 +3,7 @@ from ui.views.video_view import VideoPlayerUI
 from core.MediaController import MediaController
 from core.SubtitleManager import SubtitleManager
 from utils.logging_config import setup_logging
-
+from utils.config import get_transcript_file
 
 class VideoPlayerLogic(VideoPlayerUI):
     switch_scene_signal = Signal(str)
@@ -15,6 +15,8 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.transcription_server = transcription_server
         self.transcription_worker = None
         self.task_id = None
+        self.src_lang = None
+        self.tgt_lang = None
         self.timer = QTimer()
         self.media_controller = MediaController(
             self.media_player,
@@ -45,15 +47,15 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.media_player.positionChanged.connect(self.update_time_label)
         self.media_player.durationChanged.connect(self.update_time_label)
 
-    def load_video(self, video_path, src_lang, tgt_lang):
+    def load_video(self, video_path):
         """Load video and initialize transcription."""
         self.logger.info(
-            "Loading video player with video: %s, src_lang: %s, tgt_lang: %s", video_path, src_lang, tgt_lang
+            "Loading video player with video: %s, src_lang: %s, tgt_lang: %s", video_path, self.src_lang, self.tgt_lang
         )
         self.media_controller.load_video(video_path)
         # if(src_lang != tgt_lang): # If translation then save src as well
         #     self.subtitle_manager.load_initial_transcription(src_lang)
-        self.subtitle_manager.load_initial_transcription(tgt_lang)
+        self.subtitle_manager.load_initial_transcription(self.tgt_lang)
         QTimer.singleShot(100, self.updateSceneRect)
         QTimer.singleShot(500, self.updateSceneRect)
         if self.transcription_worker:

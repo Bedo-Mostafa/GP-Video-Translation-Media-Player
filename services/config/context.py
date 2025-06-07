@@ -30,7 +30,7 @@ class ProcessingContext:
     def get_video_hash(self) -> str:
         """Get the hashed name of the video."""
         metadata = self.video_metadata
-        raw_data = f"{metadata['video_path']}-{metadata['duration']}-{metadata['width']}-{metadata['height']}-{metadata['bitrate']}"
+        raw_data = f"{metadata['duration']}-{metadata['width']}-{metadata['height']}-{metadata['bitrate']}"
         short_hash = sha256(raw_data.encode()).hexdigest()[:16]
         return short_hash
     

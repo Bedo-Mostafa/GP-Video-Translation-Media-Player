@@ -68,7 +68,9 @@ class MainWindow(QMainWindow):
         """Switch to VideoPlayer and load the video."""
         try:
             self.video_player.task_id = self.upload_view.transcription_worker.task_id
-            self.video_player.load_video(path, src_lang, tgt_lang)
+            self.video_player.src_lang = src_lang
+            self.video_player.tgt_lang = tgt_lang
+            self.video_player.load_video(path)
             self.stacked_widget.setCurrentIndex(self.views.index('video_player'))
             self.logger.info(
                 "Switched to VideoPlayer with video: %s, src_lang: %s, tgt_lang: %s", path, src_lang, tgt_lang
