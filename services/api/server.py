@@ -72,9 +72,7 @@ class TranscriptionServer:
 
     def run_api(self):  #
         """Run the Uvicorn server."""
-        config = Config(
-            self.app, host=self.host, port=self.port, log_level="info"
-        )
+        config = Config(self.app, host=self.host, port=self.port, log_level="info")
         self.uvicorn_server = Server(config)  # Store server instance
         try:
             # uvicorn.run(self.app, host=self.host, port=self.port, log_level="info") # Original

@@ -9,6 +9,7 @@ from asyncio import create_task, sleep, iscoroutinefunction
 
 class PerformanceMetrics:
     """Class to store and manage performance metrics."""
+
     def __init__(self):
         self.start_time = time.time()
         self.end_time = None
@@ -41,10 +42,10 @@ class PerformanceMetrics:
         execution_time = self.end_time - self.start_time
         memory_change = self.end_memory - self.start_memory
         cpu_peak = max(self.cpu_samples)
-        
+
         # Format the timestamp
         timestamp = datetime.now().strftime("%H:%M:%S")
-        
+
         # Create a compact one-line summary
         status = "❌" if self.exception else "✓"
         return (
@@ -63,7 +64,7 @@ class PerformanceMetrics:
 
         # Format the timestamp
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        
+
         # Create a formatted string with clear sections
         output = [
             f"\n{'='*80}",
@@ -84,23 +85,22 @@ class PerformanceMetrics:
             f"  Start: {self.start_cpu:.1f}%",
             f"  End: {self.end_cpu:.1f}%",
             f"  Average: {cpu_avg:.1f}%",
-            f"  Peak: {cpu_peak:.1f}%"
+            f"  Peak: {cpu_peak:.1f}%",
         ]
 
         # Add arguments if they exist
         if self.function_args or self.function_kwargs:
-            output.extend([
-                f"\nArguments:",
-                f"  Args: {self.function_args}",
-                f"  Kwargs: {self.function_kwargs}"
-            ])
+            output.extend(
+                [
+                    f"\nArguments:",
+                    f"  Args: {self.function_args}",
+                    f"  Kwargs: {self.function_kwargs}",
+                ]
+            )
 
         # Add exception if it occurred
         if self.exception:
-            output.extend([
-                f"\nException:",
-                f"  {str(self.exception)}"
-            ])
+            output.extend([f"\nException:", f"  {str(self.exception)}"])
 
         output.append(f"\n{'-'*80}\n")
         return "\n".join(output)
@@ -120,8 +120,8 @@ def performance_log(func):
     # Clear log files on startup
     with log_lock:
         try:
-            open(detailed_log, 'w').close()
-            open(mini_log, 'w').close()
+            open(detailed_log, "w").close()
+            open(mini_log, "w").close()
         except Exception as e:
             print(f"Error clearing log files: {e}")
 
@@ -132,7 +132,7 @@ def performance_log(func):
                 # Write detailed log
                 with open(detailed_log, "a", encoding="utf-8") as f:
                     f.write(metrics.format_metrics(func.__name__, func.__module__))
-                
+
                 # Write mini log
                 with open(mini_log, "a", encoding="utf-8") as f:
                     f.write(metrics.format_mini_metrics(func.__name__) + "\n")
@@ -167,9 +167,7 @@ def performance_log(func):
         try:
             # Start periodic metric updates in a separate thread
             update_thread = threading.Thread(
-                target=periodic_update_sync,
-                args=(metrics,),
-                daemon=True
+                target=periodic_update_sync, args=(metrics,), daemon=True
             )
             update_thread.start()
             result = func(*args, **kwargs)

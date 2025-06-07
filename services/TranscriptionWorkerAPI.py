@@ -13,7 +13,9 @@ class TranscriptionWorkerAPI(QThread):
     progress = Signal(str)
     error = Signal(str)
 
-    def __init__(self, video_file=None, src_lang=None, tgt_lang=None, transcription_server=None):
+    def __init__(
+        self, video_file=None, src_lang=None, tgt_lang=None, transcription_server=None
+    ):
         super().__init__()
         self.logger = setup_logging()
         self.video_file = video_file

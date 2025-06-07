@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QTextEdit,
     QSizePolicy,
-    QComboBox
+    QComboBox,
 )
 from PySide6.QtGui import QFont, QPixmap, QImage
 from PySide6.QtCore import Qt, QTimer
@@ -19,8 +19,9 @@ LANG_CODE_MAP = {
     "Arabic": "ar",
     "Spanish": "es",
     "French": "fr",
-    "German": "de"
+    "German": "de",
 }
+
 
 class Welcome(QWidget):
     def __init__(self, main_window):
@@ -40,7 +41,7 @@ class Welcome(QWidget):
         main_layout.addWidget(title)
 
         # Language Selection
-        
+
         lang_layout = QHBoxLayout()
         languages = ["English", "Arabic", "Spanish", "French", "German"]
         self.src_lang_combo = QComboBox()
@@ -139,7 +140,9 @@ class Welcome(QWidget):
         if self.video_path:
             self.src_lang = LANG_CODE_MAP[self.src_lang_combo.currentText()]
             self.tgt_lang = LANG_CODE_MAP[self.tgt_lang_combo.currentText()]
-            self.main_window.switch_to_upload_view(self.video_path, self.src_lang, self.tgt_lang)
+            self.main_window.switch_to_upload_view(
+                self.video_path, self.src_lang, self.tgt_lang
+            )
         else:
             # Show warning message for 3 seconds
             self.language_warning.setVisible(True)

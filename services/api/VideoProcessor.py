@@ -7,10 +7,7 @@ from typing import Optional, Any
 
 from services.api.Processor.AudioPreprocessor import AudioPreprocessor
 from services.api.Processor.TaskManager import TaskManager
-
 from services.api.Processor.ModelManager import ModelManager
-
-
 from services.api.constants import STOP_SIGNAL
 from services.config.context import ProcessingContext
 from services.models.model_config import default_config
@@ -20,7 +17,6 @@ from services.transcription.translator import Translator
 from utils.logging_config import get_component_logger
 
 logger = get_component_logger("video_processor")
-
 
 DEFAULT_TRANSCRIPTION_QUEUE_SIZE = 50
 
@@ -210,9 +206,7 @@ class VideoProcessor:
                 )
                 return
 
-            whisper_model = self.model_manager.get_model(
-                default_config
-            ) 
+            whisper_model = self.model_manager.get_model(default_config)
             logger.info(f"{enable_translation}")
 
             transcription_to_translation_queue = Queue(
@@ -226,7 +220,11 @@ class VideoProcessor:
                     context.sample_rate,
                     whisper_model,
                     context.src_lang,
-                    transcription_to_translation_queue if enable_translation else client_output_queue,
+                    (
+                        transcription_to_translation_queue
+                        if enable_translation
+                        else client_output_queue
+                    ),
                     task_id,
                     cancel_event,
                 ),

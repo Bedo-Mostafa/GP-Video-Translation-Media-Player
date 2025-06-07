@@ -21,12 +21,15 @@ logger = get_component_logger("video_processor")
 
 global_context = None
 
+
 def set_context(ctx):
     global global_context
     global_context = ctx
 
+
 def get_context():
     return global_context
+
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):
     @app.get("/health")
@@ -51,13 +54,15 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
 
         client_output_queue, _ = processor.task_manager.register_task(task_id)
 
-        context = ProcessingContext(task_id, temp_file_path, src_lang, tgt_lang, output_folder)
+        context = ProcessingContext(
+            task_id, temp_file_path, src_lang, tgt_lang, output_folder
+        )
         set_context(context)
-        
+
         print("Context set for task:", context.task_id)
         print("Metadata:", context.video_metadata)
         print("Context hash:", context.get_video_hash())
-        
+
         Thread(
             target=processor.process_video_with_streaming,
             args=(

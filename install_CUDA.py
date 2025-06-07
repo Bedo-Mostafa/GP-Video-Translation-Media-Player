@@ -31,7 +31,7 @@ def install_pytorch(cuda_version=None):
         "11.8": "https://download.pytorch.org/whl/cu118",
         "11.7": "https://download.pytorch.org/whl/cu117",
         "11.6": "https://download.pytorch.org/whl/cu116",
-        "cpu":   "https://download.pytorch.org/whl/cpu"
+        "cpu": "https://download.pytorch.org/whl/cpu",
     }
 
     # Pick matching or closest lower version
@@ -46,11 +46,19 @@ def install_pytorch(cuda_version=None):
     print(f"📦 Installing PyTorch with compute support: {selected_version}")
 
     try:
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install",
-            "torch", "torchvision", "torchaudio",
-            "--index-url", torch_url
-        ])
+        subprocess.check_call(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "torch",
+                "torchvision",
+                "torchaudio",
+                "--index-url",
+                torch_url,
+            ]
+        )
         print("✅ PyTorch installed successfully.")
     except subprocess.CalledProcessError as e:
         print("❌ PyTorch installation failed:", e)

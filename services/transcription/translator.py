@@ -7,8 +7,14 @@ from utils.logging_config import get_component_logger
 
 logger = get_component_logger("translation")  # Using a specific logger if available
 
+
 def get_autocast(device_type):
-    return amp.autocast(device_type=device_type) if device_type == "cuda" else nullcontext()
+    return (
+        amp.autocast(device_type=device_type)
+        if device_type == "cuda"
+        else nullcontext()
+    )
+
 
 class Translator:
     def __init__(self):
@@ -41,9 +47,7 @@ class Translator:
             with no_grad():
                 with get_autocast(self.nmt_model.device.type):
                     translated_ids = self.nmt_model.generate(
-                        **inputs,
-                        num_beams=1,
-                        max_length=512
+                        **inputs, num_beams=1, max_length=512
                     )
 
             translated_text = self.tokenizer.decode(

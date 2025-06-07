@@ -5,6 +5,7 @@ from core.SubtitleManager import SubtitleManager
 from utils.logging_config import setup_logging
 from utils.config import get_transcript_file
 
+
 class VideoPlayerLogic(VideoPlayerUI):
     switch_scene_signal = Signal(str)
 
@@ -50,7 +51,10 @@ class VideoPlayerLogic(VideoPlayerUI):
     def load_video(self, video_path):
         """Load video and initialize transcription."""
         self.logger.info(
-            "Loading video player with video: %s, src_lang: %s, tgt_lang: %s", video_path, self.src_lang, self.tgt_lang
+            "Loading video player with video: %s, src_lang: %s, tgt_lang: %s",
+            video_path,
+            self.src_lang,
+            self.tgt_lang,
         )
         self.media_controller.load_video(video_path)
         # if(src_lang != tgt_lang): # If translation then save src as well

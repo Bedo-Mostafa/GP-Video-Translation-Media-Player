@@ -22,7 +22,7 @@ class Upload(QWidget):
         transcription_server,
         video_path=None,
         src_lang=None,
-        tgt_lang=None, 
+        tgt_lang=None,
     ):
         super().__init__()
         self.logger = setup_logging()
@@ -66,9 +66,12 @@ class Upload(QWidget):
         self.video_path = video_path
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        
+
         self.logger.info(
-            "Starting transcription for video: %s, src_lang: %s, tgt_lang: %s", video_path, src_lang, tgt_lang
+            "Starting transcription for video: %s, src_lang: %s, tgt_lang: %s",
+            video_path,
+            src_lang,
+            tgt_lang,
         )
         if not video_path:
             self.logger.error("No video file selected")
@@ -91,7 +94,9 @@ class Upload(QWidget):
     def handle_transcription(self):
         """Handle completion of first transcription segment."""
         self.logger.info("Received first transcription segment")
-        self.main_window.switch_to_video_player(self.video_path, self.src_lang, self.tgt_lang)
+        self.main_window.switch_to_video_player(
+            self.video_path, self.src_lang, self.tgt_lang
+        )
 
     def handle_error(self, error_message):
         """Display error message to the user."""

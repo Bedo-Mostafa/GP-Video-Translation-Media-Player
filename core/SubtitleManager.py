@@ -37,7 +37,7 @@ class SubtitleManager:
 
     def load_initial_transcription(self, lang):
         """Load initial transcription from file."""
-        
+
         transcript_file = get_transcript_file()
         try:
             if path.exists(transcript_file):

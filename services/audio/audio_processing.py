@@ -13,28 +13,33 @@ def get_video_metadata(video_path: str) -> dict:
     logger.debug(f"Getting duration for video: {video_path}")
     cmd = [
         "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration,bit_rate:stream=width,height",
-        "-of", "csv=p=0",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration,bit_rate:stream=width,height",
+        "-of",
+        "csv=p=0",
         video_path,
     ]
     try:
         result = run(cmd, stdout=PIPE, text=True, check=True)
-        
+
         lines = result.stdout.strip().splitlines()
         if len(lines) != 3:
             raise ValueError(f"Unexpected ffprobe output: {result.stdout}")
-        
-        width, height = map(int, lines[0].split(','))
-        duration, bitrate = map(float, lines[2].split(','))
+
+        width, height = map(int, lines[0].split(","))
+        duration, bitrate = map(float, lines[2].split(","))
         bitrate = int(bitrate)
-        logger.debug(f"Duration: {duration}s, Bitrate: {bitrate}, Width: {width}, Height: {height}")
-        
+        logger.debug(
+            f"Duration: {duration}s, Bitrate: {bitrate}, Width: {width}, Height: {height}"
+        )
+
         return {
             "duration": duration,
             "width": width,
             "height": height,
-            "bitrate": bitrate
+            "bitrate": bitrate,
         }
     except CalledProcessError as e:
         logger.error(f"FFprobe failed: {e.stderr}")
@@ -44,6 +49,7 @@ def get_video_metadata(video_path: str) -> dict:
             "FFprobe not found. Please ensure FFmpeg is installed and added to your PATH."
         )
         raise
+
 
 @performance_log
 def extract_raw_audio_to_numpy(
@@ -58,16 +64,25 @@ def extract_raw_audio_to_numpy(
     extract_cmd = [
         "ffmpeg",
         "-y",
-        "-threads", "0",
-        "-hwaccel", "auto",
-        "-ss", str(start_time),
-        "-i", video_path,
+        "-threads",
+        "0",
+        "-hwaccel",
+        "auto",
+        "-ss",
+        str(start_time),
+        "-i",
+        video_path,
         "-vn",  # No video
-        "-acodec", "pcm_s16le",  # Output PCM 16-bit little-endian
-        "-ar", "16000",  # Target sample rate 16kHz (Whisper preferred)
-        "-ac", "1",  # Mono channel
-        "-af", "aresample=resampler=soxr", # Use SoXR resampler (faster than default)
-        "-f", "s16le",  # Output raw s16le PCM
+        "-acodec",
+        "pcm_s16le",  # Output PCM 16-bit little-endian
+        "-ar",
+        "16000",  # Target sample rate 16kHz (Whisper preferred)
+        "-ac",
+        "1",  # Mono channel
+        "-af",
+        "aresample=resampler=soxr",  # Use SoXR resampler (faster than default)
+        "-f",
+        "s16le",  # Output raw s16le PCM
         "pipe:1",  # Output to stdout
     ]
     try:

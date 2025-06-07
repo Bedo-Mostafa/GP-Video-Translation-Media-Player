@@ -60,7 +60,9 @@ class VideoPlayerUI(QMainWindow):
 
         # Subtitle items (background and text)
         self.subtitle_background = QGraphicsRectItem()
-        self.subtitle_background.setBrush(QBrush(QColor(0, 0, 0, 180)))  # Semi-transparent black
+        self.subtitle_background.setBrush(
+            QBrush(QColor(0, 0, 0, 180))
+        )  # Semi-transparent black
         self.subtitle_background.setPen(Qt.NoPen)
         self.scene.addItem(self.subtitle_background)
 

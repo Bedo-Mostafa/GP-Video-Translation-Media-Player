@@ -8,7 +8,7 @@ from utils.logging_config import setup_logging
 
 
 class MainWindow(QMainWindow):
-    views = ['view1', 'view2', 'video_player']
+    views = ["view1", "view2", "video_player"]
 
     def __init__(self):
         super().__init__()
@@ -47,7 +47,7 @@ class MainWindow(QMainWindow):
     def switch_to_welcome_view(self):
         """Switch to Scene1."""
         try:
-            self.stacked_widget.setCurrentIndex(self.views.index('view1'))
+            self.stacked_widget.setCurrentIndex(self.views.index("view1"))
             self.logger.info("Switched to Scene1")
         except Exception as e:
             self.logger.error("Error switching to Scene1: %s", str(e))
@@ -57,9 +57,12 @@ class MainWindow(QMainWindow):
         try:
             self.upload_view.reset_scene()
             self.upload_view.transcript(path, src_lang, tgt_lang)
-            self.stacked_widget.setCurrentIndex(self.views.index('view2'))
+            self.stacked_widget.setCurrentIndex(self.views.index("view2"))
             self.logger.info(
-                "Switched to Scene2 with video: %s, src_lang: %s, tgt_lang: %s", path, src_lang, tgt_lang
+                "Switched to Scene2 with video: %s, src_lang: %s, tgt_lang: %s",
+                path,
+                src_lang,
+                tgt_lang,
             )
         except Exception as e:
             self.logger.error("Error switching to Scene2: %s", str(e))
@@ -71,9 +74,12 @@ class MainWindow(QMainWindow):
             self.video_player.src_lang = src_lang
             self.video_player.tgt_lang = tgt_lang
             self.video_player.load_video(path)
-            self.stacked_widget.setCurrentIndex(self.views.index('video_player'))
+            self.stacked_widget.setCurrentIndex(self.views.index("video_player"))
             self.logger.info(
-                "Switched to VideoPlayer with video: %s, src_lang: %s, tgt_lang: %s", path, src_lang, tgt_lang
+                "Switched to VideoPlayer with video: %s, src_lang: %s, tgt_lang: %s",
+                path,
+                src_lang,
+                tgt_lang,
             )
         except Exception as e:
             self.logger.error("Error switching to VideoPlayer: %s", str(e))

@@ -9,6 +9,7 @@ from utils.logging_config import get_component_logger
 
 logger = get_component_logger("video_processor")
 
+
 class AudioPreprocessor:
     """Simplified audio preprocessor, mainly for raw audio extraction."""
 
