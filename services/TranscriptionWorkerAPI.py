@@ -2,7 +2,7 @@ from os import path, remove
 from PySide6.QtCore import QThread, Signal
 from json import loads, JSONDecodeError
 from filelock import FileLock
-from utils.config import get_transcript_file, get_transcript_lock_file
+from utils.config import get_transcript_file
 from services.TranscriptionClient import TranscriptionClient
 from utils.logging_config import setup_logging
 
@@ -13,27 +13,32 @@ class TranscriptionWorkerAPI(QThread):
     progress = Signal(str)
     error = Signal(str)
 
-    def __init__(self, video_file=None, language=None, transcription_server=None):
+    def __init__(self, video_file=None, src_lang=None, tgt_lang=None, transcription_server=None):
         super().__init__()
         self.logger = setup_logging()
         self.video_file = video_file
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
         self.server_port = transcription_server.port if transcription_server else 8000
-        self.translate = language
+        self.translate = True if src_lang != tgt_lang else False
         self.transcription_server = transcription_server
         self.client = TranscriptionClient(self.server_port, transcription_server)
         self.task_id = None
         self._is_running = True
-        self.lock = FileLock(get_transcript_lock_file())
+        self.lock = FileLock(get_transcript_file(is_lock=True))
         self.segment_counter = 0
 
     def run(self):
         """Process transcription stream and save segments."""
         try:
-            self._prepare_transcription_file()
+            # self._prepare_transcription_file()
+            self.segment_counter = 0
             self.client.start_server_if_needed()
             self.task_id, response = self.client.upload_video(
                 self.video_file,
                 self.translate,
+                self.src_lang,
+                self.tgt_lang,
                 self.progress.emit,
                 lambda: not self._is_running,
             )
@@ -63,9 +68,6 @@ class TranscriptionWorkerAPI(QThread):
                         if is_first_segment:
                             self.receive_first_segment.emit("First Segment Received")
                             is_first_segment = False
-                        # self.progress.emit(
-                        #     f"Segment {self.segment_counter}: {segment['text']}"
-                        # )
                     except JSONDecodeError:
                         self.logger.error("Failed to decode JSON: %s", line)
                     except Exception as e:

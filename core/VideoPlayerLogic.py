@@ -45,13 +45,15 @@ class VideoPlayerLogic(VideoPlayerUI):
         self.media_player.positionChanged.connect(self.update_time_label)
         self.media_player.durationChanged.connect(self.update_time_label)
 
-    def load_video(self, video_path, language):
+    def load_video(self, video_path, src_lang, tgt_lang):
         """Load video and initialize transcription."""
         self.logger.info(
-            "Loading video player with video: %s, language: %s", video_path, language
+            "Loading video player with video: %s, src_lang: %s, tgt_lang: %s", video_path, src_lang, tgt_lang
         )
         self.media_controller.load_video(video_path)
-        self.subtitle_manager.load_initial_transcription()
+        # if(src_lang != tgt_lang): # If translation then save src as well
+        #     self.subtitle_manager.load_initial_transcription(src_lang)
+        self.subtitle_manager.load_initial_transcription(tgt_lang)
         QTimer.singleShot(100, self.updateSceneRect)
         QTimer.singleShot(500, self.updateSceneRect)
         if self.transcription_worker:

@@ -37,6 +37,7 @@ class VideoProcessor:
         raw_audio_np: ndarray,
         sample_rate: int,
         whisper_model: Any,
+        src_lang: str,
         target_queue: Queue,
         task_id: str,
         cancel_event: Event,
@@ -70,6 +71,7 @@ class VideoProcessor:
 
             for segment in transcribe_segment(
                 model=whisper_model,
+                language=src_lang,
                 audio_input=raw_audio_np,
                 start_time=0.0,
                 end_time=audio_duration,
@@ -182,7 +184,7 @@ class VideoProcessor:
     def process_video_with_streaming(
         self,
         context: ProcessingContext,
-        enable_translation: bool,  # Changed from 'language' to 'enable_translation' for clarity
+        enable_translation: bool,
         translator: Translator,
     ):
         task_id = context.task_id
@@ -210,27 +212,29 @@ class VideoProcessor:
 
             whisper_model = self.model_manager.get_model(
                 default_config
-            )  # Load whisper model
+            ) 
             logger.info(f"{enable_translation}")
+
+            transcription_to_translation_queue = Queue(
+                maxsize=DEFAULT_TRANSCRIPTION_QUEUE_SIZE
+            )
+
+            transcription_thread = Thread(
+                target=self._transcription_producer_worker,
+                args=(
+                    context.audio_data_np,
+                    context.sample_rate,
+                    whisper_model,
+                    context.src_lang,
+                    transcription_to_translation_queue if enable_translation else client_output_queue,
+                    task_id,
+                    cancel_event,
+                ),
+                daemon=True,
+            )
 
             if enable_translation:
                 # Transcription -> Translation Queue -> Client Output Queue
-                transcription_to_translation_queue = Queue(
-                    maxsize=DEFAULT_TRANSCRIPTION_QUEUE_SIZE
-                )
-
-                transcription_thread = Thread(
-                    target=self._transcription_producer_worker,
-                    args=(
-                        context.audio_data_np,
-                        context.sample_rate,
-                        whisper_model,
-                        transcription_to_translation_queue,
-                        task_id,
-                        cancel_event,
-                    ),
-                    daemon=True,
-                )
                 translator_thread = Thread(
                     target=self._translation_consumer_producer_worker,
                     args=(
@@ -249,18 +253,6 @@ class VideoProcessor:
                 translator_thread.start()
             else:
                 # Transcription -> Client Output Queue
-                transcription_thread = Thread(
-                    target=self._transcription_producer_worker,
-                    args=(
-                        context.audio_data_np,
-                        context.sample_rate,
-                        whisper_model,
-                        client_output_queue,  # Target client queue directly
-                        task_id,
-                        cancel_event,
-                    ),
-                    daemon=True,
-                )
                 logger.info(
                     f"Task {task_id}: Starting transcription (direct to client) thread."
                 )

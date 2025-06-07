@@ -5,22 +5,30 @@ from PySide6.QtWidgets import (
     QPushButton,
     QHBoxLayout,
     QFileDialog,
-    QRadioButton,
     QTextEdit,
     QSizePolicy,
-    QButtonGroup,
+    QComboBox
 )
 from PySide6.QtGui import QFont, QPixmap, QImage
 from PySide6.QtCore import Qt, QTimer
 
 from cv2 import VideoCapture, cvtColor, COLOR_BGR2RGB
 
+LANG_CODE_MAP = {
+    "English": "en",
+    "Arabic": "ar",
+    "Spanish": "es",
+    "French": "fr",
+    "German": "de"
+}
+
 class Welcome(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
         self.video_path = None
-        self.is_arabic = None  # True for Arabic, False for English
+        self.src_lang = "English"
+        self.tgt_lang = "Arabic"
 
         # Main layout
         main_layout = QVBoxLayout(self)
@@ -32,21 +40,23 @@ class Welcome(QWidget):
         main_layout.addWidget(title)
 
         # Language Selection
+        
         lang_layout = QHBoxLayout()
-        self.arabic_rb = QRadioButton("Arabic")
-        self.english_rb = QRadioButton("English")
+        languages = ["English", "Arabic", "Spanish", "French", "German"]
+        self.src_lang_combo = QComboBox()
+        self.src_lang_combo.addItems(languages)
+        self.src_lang_combo.setCurrentText("English")
 
-        self.lang_group = QButtonGroup(self)
-        self.lang_group.setExclusive(True)
-        self.lang_group.addButton(self.arabic_rb)
-        self.lang_group.addButton(self.english_rb)
+        self.tgt_lang_combo = QComboBox()
+        self.tgt_lang_combo.addItems(languages)
+        self.tgt_lang_combo.setCurrentText("Arabic")
 
-        for rb in (self.arabic_rb, self.english_rb):
-            rb.setFixedSize(120, 60)
-            rb.toggled.connect(self.set_language_selection)
-            lang_layout.addWidget(rb)
+        lang_layout.addWidget(QLabel("From:"))
+        lang_layout.addWidget(self.src_lang_combo)
+        lang_layout.addSpacing(20)
+        lang_layout.addWidget(QLabel("To:"))
+        lang_layout.addWidget(self.tgt_lang_combo)
 
-        lang_layout.setSpacing(50)
         lang_layout.setAlignment(Qt.AlignCenter)
         main_layout.addLayout(lang_layout)
 
@@ -125,15 +135,11 @@ class Welcome(QWidget):
             self.thumbnail_label.clear()
             self.thumbnail_label.setVisible(False)
 
-    def set_language_selection(self):
-        if self.arabic_rb.isChecked():
-            self.is_arabic = True
-        elif self.english_rb.isChecked():
-            self.is_arabic = False
-
     def send_data(self):
-        if self.video_path is not None and self.lang_group.checkedButton() is not None:
-            self.main_window.switch_to_upload_view(self.video_path, self.is_arabic)
+        if self.video_path:
+            self.src_lang = LANG_CODE_MAP[self.src_lang_combo.currentText()]
+            self.tgt_lang = LANG_CODE_MAP[self.tgt_lang_combo.currentText()]
+            self.main_window.switch_to_upload_view(self.video_path, self.src_lang, self.tgt_lang)
         else:
             # Show warning message for 3 seconds
             self.language_warning.setVisible(True)

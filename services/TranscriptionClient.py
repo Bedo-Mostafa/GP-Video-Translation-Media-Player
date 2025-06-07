@@ -43,7 +43,7 @@ class TranscriptionClient:
                 raise RuntimeError("Transcription server failed to start")
 
     def upload_video(
-        self, video_file, enable_translation, progress_callback, abort_check
+        self, video_file, enable_translation, src_lang, tgt_lang, progress_callback, abort_check
     ):
         """Upload video file to the transcription server."""
         try:
@@ -52,6 +52,8 @@ class TranscriptionClient:
                     fields={
                         "file": (path.basename(video_file), f, "video/mp4"),
                         "enable_translation": "True" if enable_translation else "False",
+                        "src_lang": src_lang,
+                        "tgt_lang": tgt_lang,
                     }
                 )
 

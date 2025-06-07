@@ -8,9 +8,7 @@ from utils.logging_config import setup_logging
 
 
 class MainWindow(QMainWindow):
-    VIEW1_INDEX = 0
-    VIEW2_INDEX = 1
-    VIDEO_PLAYER_INDEX = 2
+    views = ['view1', 'view2', 'video_player']
 
     def __init__(self):
         super().__init__()
@@ -49,31 +47,31 @@ class MainWindow(QMainWindow):
     def switch_to_welcome_view(self):
         """Switch to Scene1."""
         try:
-            self.stacked_widget.setCurrentIndex(self.VIEW1_INDEX)
+            self.stacked_widget.setCurrentIndex(self.views.index('view1'))
             self.logger.info("Switched to Scene1")
         except Exception as e:
             self.logger.error("Error switching to Scene1: %s", str(e))
 
-    def switch_to_upload_view(self, path, language):
+    def switch_to_upload_view(self, path, src_lang, tgt_lang):
         """Switch to Scene2 and start transcription."""
         try:
             self.upload_view.reset_scene()
-            self.upload_view.transcript(path, language)
-            self.stacked_widget.setCurrentIndex(self.VIEW2_INDEX)
+            self.upload_view.transcript(path, src_lang, tgt_lang)
+            self.stacked_widget.setCurrentIndex(self.views.index('view2'))
             self.logger.info(
-                "Switched to Scene2 with video: %s, language: %s", path, language
+                "Switched to Scene2 with video: %s, src_lang: %s, tgt_lang: %s", path, src_lang, tgt_lang
             )
         except Exception as e:
             self.logger.error("Error switching to Scene2: %s", str(e))
 
-    def switch_to_video_player(self, path, language):
+    def switch_to_video_player(self, path, src_lang, tgt_lang):
         """Switch to VideoPlayer and load the video."""
         try:
             self.video_player.task_id = self.upload_view.transcription_worker.task_id
-            self.video_player.load_video(path, language)
-            self.stacked_widget.setCurrentIndex(self.VIDEO_PLAYER_INDEX)
+            self.video_player.load_video(path, src_lang, tgt_lang)
+            self.stacked_widget.setCurrentIndex(self.views.index('video_player'))
             self.logger.info(
-                "Switched to VideoPlayer with video: %s, language: %s", path, language
+                "Switched to VideoPlayer with video: %s, src_lang: %s, tgt_lang: %s", path, src_lang, tgt_lang
             )
         except Exception as e:
             self.logger.error("Error switching to VideoPlayer: %s", str(e))

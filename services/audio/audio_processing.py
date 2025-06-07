@@ -31,6 +31,7 @@ def get_video_metadata(video_path: str) -> dict:
         logger.debug(f"Duration: {duration}s, Bitrate: {bitrate}, Width: {width}, Height: {height}")
         
         return {
+            "video_path": video_path,
             "duration": duration,
             "width": width,
             "height": height,

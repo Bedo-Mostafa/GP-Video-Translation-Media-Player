@@ -10,6 +10,7 @@ from services.utils.aspect import performance_log
 @performance_log
 def transcribe_segment(
     model: WhisperModel,
+    language: str,
     audio_input: np.ndarray,
     start_time: float,
     end_time: float,
@@ -17,7 +18,7 @@ def transcribe_segment(
     try:
         segments, _ = model.transcribe(
             audio_input,
-            language="en",
+            language=language,
             beam_size=1,
             no_speech_threshold=0.5,
             word_timestamps=True,

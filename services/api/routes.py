@@ -19,10 +19,14 @@ from utils.logging_config import get_component_logger
 
 logger = get_component_logger("video_processor")
 
-context = None
+global_context = None
+
+def set_context(ctx):
+    global global_context
+    global_context = ctx
 
 def get_context():
-    return context
+    return global_context
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):
     @app.get("/health")
@@ -33,7 +37,9 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
     @performance_log
     async def transcribe_video_streaming(
         file: UploadFile = File(...),
-        enable_translation: bool = Form(False),  # Changed from 'language'
+        enable_translation: bool = Form(False),
+        src_lang: str = Form("en"),
+        tgt_lang: str = Form("ar"),
     ):
         task_id = str(uuid4())
         output_folder = f"temp/{task_id}"  # For initial video save
@@ -45,8 +51,12 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
 
         client_output_queue, _ = processor.task_manager.register_task(task_id)
 
-        global context
-        context = ProcessingContext(task_id, temp_file_path, output_folder)
+        context = ProcessingContext(task_id, temp_file_path, src_lang, tgt_lang, output_folder)
+        set_context(context)
+        
+        print("Context set for task:", context.task_id)
+        print("Metadata:", context.video_metadata)
+        print("Context hash:", context.get_video_hash())
         
         Thread(
             target=processor.process_video_with_streaming,

@@ -4,19 +4,11 @@ import os
 # Configuration settings for the video player application
 TRANSCRIPT_DIR = "transcriptions/"
 
-def get_transcript_file():
+def get_transcript_file(is_lock=False):
     context = get_context()
     if context is None:
-        return os.path.join(TRANSCRIPT_DIR, "transcription.srt")
-    video_hash = context.get_video_hash()
-    return os.path.join(TRANSCRIPT_DIR, f"{video_hash}.srt")
-
-def get_transcript_lock_file():
-    context = get_context()
-    if context is None:
-        return os.path.join(TRANSCRIPT_DIR, "transcription.srt.lock")
-    video_hash = context.get_video_hash()
-    return os.path.join(TRANSCRIPT_DIR, f"{video_hash}.srt.lock")
+        return os.path.join(TRANSCRIPT_DIR, "transcription.srt.lock" if is_lock else "transcription.srt")
+    return context.get_srt_file(context.tgt_lang, is_lock)
 
 DEFAULT_SERVER_PORT = 8000
 API_BASE_URL = "http://localhost:{port}"
