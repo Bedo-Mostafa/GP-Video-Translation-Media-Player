@@ -1,4 +1,5 @@
 from PySide6.QtCore import Signal, QTimer
+from services.utils.context_manager import ContextManager
 from ui.views.video_view import VideoPlayerUI
 from core.MediaController import MediaController
 from core.SubtitleManager import SubtitleManager
@@ -57,9 +58,7 @@ class VideoPlayerLogic(VideoPlayerUI):
             self.tgt_lang,
         )
         self.media_controller.load_video(video_path)
-        # if(src_lang != tgt_lang): # If translation then save src as well
-        #     self.subtitle_manager.load_initial_transcription(src_lang)
-        self.subtitle_manager.load_initial_transcription(self.tgt_lang)
+        self.subtitle_manager.load_initial_transcription()
         QTimer.singleShot(100, self.updateSceneRect)
         QTimer.singleShot(500, self.updateSceneRect)
         if self.transcription_worker:

@@ -13,6 +13,8 @@ from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtCore import Qt
 from core import main_window
 from services.TranscriptionWorkerAPI import TranscriptionWorkerAPI
+from services.utils.context_manager import ContextManager
+from ui.views.video_view import QTimer
 from utils.logging_config import setup_logging
 from utils.config import get_transcript_file
 
@@ -22,9 +24,6 @@ class Upload(QWidget):
         self,
         main_window: main_window,
         transcription_server,
-        video_path=None,
-        src_lang=None,
-        tgt_lang=None,
     ):
         super().__init__()
         self.logger = setup_logging()
@@ -78,18 +77,18 @@ class Upload(QWidget):
         if not video_path:
             self.logger.error("No video file selected")
             return
-        self.transcription_worker = TranscriptionWorkerAPI(
-            video_path, src_lang, tgt_lang, self.transcription_server
-        )
+
+        self.transcription_worker = TranscriptionWorkerAPI(self.transcription_server)
         self.main_window.video_player.transcription_worker = self.transcription_worker
         self.transcription_worker.progress.connect(self.update_progress)
-        transcript_file = get_transcript_file()
-        # if path.exists(transcript_file) and os.path.getsize(transcript_file) > 0:
-        # self.handle_transcription()
-        # else:
-        self.transcription_worker.receive_first_segment.connect(
-            self.handle_transcription
-        )
+
+        if self.check_cached_transcription():
+            self.handle_transcription()
+        else:
+            self.transcription_worker.receive_first_segment.connect(
+                self.handle_transcription
+            )
+
         self.transcription_worker.finished.connect(
             self.main_window.video_player.subtitle_manager.set_transcription_complete
         )
@@ -97,9 +96,26 @@ class Upload(QWidget):
         self.transcription_worker.start()
         self.logger.info("TranscriptionWorker started")
 
+    def check_cached_transcription(self):
+        """Check if a cached transcript exists and handle it."""
+        transcript_file = get_transcript_file()
+        if path.exists(transcript_file) and os.path.getsize(transcript_file) > 0:
+            with open(transcript_file, "r", encoding="utf-8") as f:
+                non_empty_lines = [line for line in f if line.strip()]
+            if len(non_empty_lines) < 9:
+                self.logger.info("Cached transcript found, but not sufficient to load")
+                return False
+            self.logger.info("Cached transcript found, loading it")
+            return True
+        else:
+            self.logger.info("No cached transcript found, starting new transcription")
+            return False
+
     def handle_transcription(self):
-        """Handle completion of first transcription segment."""
-        self.logger.info("Received first transcription segment")
+        """Handle loading of cached transcription or completion of first transcription segment."""
+        QTimer.singleShot(100, self.switch_to_video_player)
+
+    def switch_to_video_player(self):
         self.main_window.switch_to_video_player(
             self.video_path, self.src_lang, self.tgt_lang
         )

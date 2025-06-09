@@ -14,7 +14,7 @@ class ProcessingContext:
         self.src_lang: str = src_lang
         self.tgt_lang: str = tgt_lang
         self.start_from: float = None
-        self.segment_start: int = None
+        self.segment_counter: int = None
         self.output_folder: str = None
         self.video_metadata: dict = get_video_metadata(self.video_path)
         self.video_hash: str = None

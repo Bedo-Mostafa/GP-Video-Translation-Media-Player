@@ -34,7 +34,7 @@ class SubtitleManager:
 
         self.timer.timeout.connect(self.check_subtitle)
 
-    def load_initial_transcription(self, lang):
+    def load_initial_transcription(self):
         """Load initial transcription from file."""
 
         transcript_file = get_transcript_file()

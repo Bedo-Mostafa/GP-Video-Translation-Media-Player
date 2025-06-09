@@ -16,11 +16,12 @@ from utils.logging_config import setup_logging
 class TranscriptionClient:
     """Handles HTTP communication with the transcription server."""
 
-    def __init__(self, server_port, transcription_server=None):
+    def __init__(self, server_port, transcription_server=None, context=None):
         self.logger = setup_logging()
         self.server_port = server_port
         self.api_url = API_BASE_URL.format(port=server_port)
         self.transcription_server = transcription_server
+        self.context = context
         self.response = None
 
     def start_server_if_needed(self):
@@ -44,26 +45,18 @@ class TranscriptionClient:
 
     def upload_video(
         self,
-        video_file,
+        context,
         enable_translation,
-        src_lang,
-        tgt_lang,
-        start_from,
-        segment_counter,
         progress_callback,
         abort_check,
     ):
         """Upload video file to the transcription server."""
         try:
-            with open(video_file, "rb") as f:
+            with open(context.video_path, "rb") as f:
                 encoder = MultipartEncoder(
                     fields={
-                        "file": (path.basename(video_file), f, "video/mp4"),
+                        "file": (path.basename(context.video_path), f, "video/mp4"),
                         "enable_translation": "True" if enable_translation else "False",
-                        "src_lang": src_lang,
-                        "tgt_lang": tgt_lang,
-                        "start_from": str(start_from),
-                        "segment_counter": str(segment_counter),
                     }
                 )
 

@@ -16,18 +16,19 @@ class TranscriptionWorkerAPI(QThread):
     progress = Signal(str)
     error = Signal(str)
 
-    def __init__(
-        self, video_file=None, src_lang=None, tgt_lang=None, transcription_server=None
-    ):
+    def __init__(self, transcription_server=None):
         super().__init__()
         self.logger = setup_logging()
-        self.video_file = video_file
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
+        self.context = ContextManager.get_context()
+        self.video_file = self.context.video_path
+        self.src_lang = self.context.src_lang
+        self.tgt_lang = self.context.tgt_lang
         self.server_port = transcription_server.port if transcription_server else 8000
-        self.translate = True if src_lang != tgt_lang else False
+        self.translate = True if self.src_lang != self.tgt_lang else False
         self.transcription_server = transcription_server
-        self.client = TranscriptionClient(self.server_port, transcription_server)
+        self.client = TranscriptionClient(
+            self.server_port, transcription_server, ContextManager.get_context()
+        )
         self.task_id = None
         self._is_running = True
         self.lock = None
@@ -40,12 +41,8 @@ class TranscriptionWorkerAPI(QThread):
             self._prepare_transcription_file()
             self.client.start_server_if_needed()
             self.task_id, response = self.client.upload_video(
-                self.video_file,
+                self.context,
                 self.translate,
-                self.src_lang,
-                self.tgt_lang,
-                self.start_from,
-                self.segment_counter,
                 self.progress.emit,
                 lambda: not self._is_running,
             )
@@ -152,7 +149,7 @@ class TranscriptionWorkerAPI(QThread):
 
         context = ContextManager.get_context()
         context.start_from = self.start_from
-        context.segment_start = self.segment_counter
+        context.segment_counter = self.segment_counter
 
     def _save_segment(self, text):
         """Save a transcription segment to file."""

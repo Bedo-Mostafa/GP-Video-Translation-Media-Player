@@ -31,10 +31,6 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
     async def transcribe_video_streaming(
         file: UploadFile = File(...),
         enable_translation: bool = Form(False),
-        src_lang: str = Form("en"),
-        tgt_lang: str = Form("ar"),
-        start_from: float = Form(0.0),
-        segment_start: int = Form(0),
     ):
         task_id = str(uuid4())
         output_folder = f"temp/{task_id}"  # For initial video save
@@ -66,7 +62,6 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         ).start()
 
         async def stream_transcription_results():
-            # [ Stream consumption logic from previous routes.py is largely okay ]
             # It reads from client_output_queue and sends JSON lines.
             # Ensure it handles STOP_SIGNAL and potential error dicts correctly.
             try:

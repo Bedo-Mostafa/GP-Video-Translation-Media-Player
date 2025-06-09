@@ -1,9 +1,11 @@
 from services.utils.context_manager import ContextManager
 
 
-def get_transcript_file(is_lock=False):
+def get_transcript_file(is_lock=False, lang=None):
     context = ContextManager.get_context()
-    return context.get_srt_file(context.tgt_lang, is_lock)
+    if lang is None:
+        lang = context.tgt_lang
+    return context.get_srt_file(lang, is_lock)
 
 
 # Configuration settings for the video player application

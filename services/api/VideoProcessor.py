@@ -37,7 +37,7 @@ class VideoProcessor:
         context: ProcessingContext,
         cancel_event: Event,
     ):
-        segment_idx_counter = context.segment_start
+        segment_idx_counter = context.segment_counter
         try:
             logger.info(
                 f"Task {context.task_id} (Transcription): Audio shape: {raw_audio_np.shape}"
