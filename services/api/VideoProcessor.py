@@ -24,7 +24,7 @@ DEFAULT_TRANSCRIPTION_QUEUE_SIZE = 50
 class VideoProcessor:
     def __init__(self):
         self.model_manager = ModelManager()
-        self.audio_processor = AudioPreprocessor()  # Simplified preprocessor
+        self.audio_processor = AudioPreprocessor()
         self.task_manager = TaskManager()
         logger.info("VideoProcessor initialized (Simplified Streaming Pipeline)")
 
@@ -33,23 +33,26 @@ class VideoProcessor:
         raw_audio_np: ndarray,
         sample_rate: int,
         whisper_model: Any,
-        src_lang: str,
         target_queue: Queue,
-        task_id: str,
+        context: ProcessingContext,
         cancel_event: Event,
     ):
-        segment_idx_counter = 0
+        segment_idx_counter = context.segment_start
         try:
             logger.info(
-                f"Task {task_id} (Transcription): Audio shape: {raw_audio_np.shape}"
+                f"Task {context.task_id} (Transcription): Audio shape: {raw_audio_np.shape}"
             )
             logger.info(
-                f"Task {task_id} (Transcription): Duration: {len(raw_audio_np) / sample_rate:.2f}s"
+                f"Task {context.task_id} (Transcription): Duration: {len(raw_audio_np) / sample_rate:.2f}s"
             )
-            logger.info(f"Task {task_id} (Transcription): Sample rate: {sample_rate}")
+            logger.info(
+                f"Task {context.task_id} (Transcription): Sample rate: {sample_rate}"
+            )
 
             if len(raw_audio_np) == 0:
-                logger.error(f"Task {task_id} (Transcription): Audio array is empty!")
+                logger.error(
+                    f"Task {context.task_id} (Transcription): Audio array is empty!"
+                )
                 target_queue.put(
                     {
                         "status": "error",
@@ -59,27 +62,27 @@ class VideoProcessor:
                 )
                 return
 
-            audio_duration = len(raw_audio_np) / sample_rate
+            audio_duration = context.get_video_duration()
 
             logger.info(
-                f"Task {task_id} (Transcription): Streaming transcription with `transcribe_segment`..."
+                f"Task {context.task_id} (Transcription): Streaming transcription with `transcribe_segment`..."
             )
 
             for segment in transcribe_segment(
                 model=whisper_model,
-                language=src_lang,
+                language=context.src_lang,
                 audio_input=raw_audio_np,
-                start_time=0.0,
+                start_time=context.start_from,
                 end_time=audio_duration,
             ):
                 if cancel_event.is_set():
                     logger.info(
-                        f"Task {task_id} (Transcription): Cancellation detected. Stopping."
+                        f"Task {context.task_id} (Transcription): Cancellation detected. Stopping."
                     )
                     break
 
                 logger.info(
-                    f"Task {task_id} (Transcription): Segment {segment_idx_counter}: "
+                    f"Task {context.task_id} (Transcription): Segment {segment_idx_counter}: "
                     f"start={segment['start']}, end={segment['end']}, text='{segment['text'][:50]}...'"
                 )
 
@@ -91,14 +94,14 @@ class VideoProcessor:
                 }
                 target_queue.put(segment_data)
                 logger.debug(
-                    f"Task {task_id} (Transcription): Produced segment {segment_idx_counter} "
+                    f"Task {context.task_id} (Transcription): Produced segment {segment_idx_counter} "
                     f"({segment_data['start']:.2f}s - {segment_data['end']:.2f}s)"
                 )
                 segment_idx_counter += 1
 
         except Exception as e:
             logger.error(
-                f"Task {task_id} (Transcription): Error during transcription: {e}",
+                f"Task {context.task_id} (Transcription): Error during transcription: {e}",
                 exc_info=True,
             )
             target_queue.put(
@@ -112,7 +115,7 @@ class VideoProcessor:
         finally:
             target_queue.put(STOP_SIGNAL)
             logger.info(
-                f"Task {task_id} (Transcription): Producer finished, sent STOP_SIGNAL to target queue."
+                f"Task {context.task_id} (Transcription): Producer finished, sent STOP_SIGNAL to target queue."
             )
 
     def _translation_consumer_producer_worker(
@@ -207,7 +210,6 @@ class VideoProcessor:
                 return
 
             whisper_model = self.model_manager.get_model(default_config)
-            logger.info(f"{enable_translation}")
 
             transcription_to_translation_queue = Queue(
                 maxsize=DEFAULT_TRANSCRIPTION_QUEUE_SIZE
@@ -219,13 +221,12 @@ class VideoProcessor:
                     context.audio_data_np,
                     context.sample_rate,
                     whisper_model,
-                    context.src_lang,
                     (
                         transcription_to_translation_queue
                         if enable_translation
                         else client_output_queue
                     ),
-                    task_id,
+                    context,
                     cancel_event,
                 ),
                 daemon=True,

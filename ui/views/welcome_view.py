@@ -1,3 +1,6 @@
+from services.utils.context_manager import ContextManager
+from services.config.context import ProcessingContext
+
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -140,6 +143,15 @@ class Welcome(QWidget):
         if self.video_path:
             self.src_lang = LANG_CODE_MAP[self.src_lang_combo.currentText()]
             self.tgt_lang = LANG_CODE_MAP[self.tgt_lang_combo.currentText()]
+
+            context = ProcessingContext(
+                video_path=self.video_path,
+                src_lang=self.src_lang,
+                tgt_lang=self.tgt_lang,
+            )
+            context.video_hash = context.get_video_hash()
+            ContextManager.set_context(context)
+
             self.main_window.switch_to_upload_view(
                 self.video_path, self.src_lang, self.tgt_lang
             )

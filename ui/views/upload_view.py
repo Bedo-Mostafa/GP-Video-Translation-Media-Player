@@ -1,4 +1,5 @@
 from os import path
+import os
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -13,6 +14,7 @@ from PySide6.QtCore import Qt
 from core import main_window
 from services.TranscriptionWorkerAPI import TranscriptionWorkerAPI
 from utils.logging_config import setup_logging
+from utils.config import get_transcript_file
 
 
 class Upload(QWidget):
@@ -81,6 +83,10 @@ class Upload(QWidget):
         )
         self.main_window.video_player.transcription_worker = self.transcription_worker
         self.transcription_worker.progress.connect(self.update_progress)
+        transcript_file = get_transcript_file()
+        # if path.exists(transcript_file) and os.path.getsize(transcript_file) > 0:
+        # self.handle_transcription()
+        # else:
         self.transcription_worker.receive_first_segment.connect(
             self.handle_transcription
         )

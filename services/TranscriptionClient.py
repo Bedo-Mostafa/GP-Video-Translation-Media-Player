@@ -48,6 +48,8 @@ class TranscriptionClient:
         enable_translation,
         src_lang,
         tgt_lang,
+        start_from,
+        segment_counter,
         progress_callback,
         abort_check,
     ):
@@ -60,6 +62,8 @@ class TranscriptionClient:
                         "enable_translation": "True" if enable_translation else "False",
                         "src_lang": src_lang,
                         "tgt_lang": tgt_lang,
+                        "start_from": str(start_from),
+                        "segment_counter": str(segment_counter),
                     }
                 )
 

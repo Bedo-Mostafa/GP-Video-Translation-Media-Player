@@ -13,22 +13,12 @@ from services.api.constants import STOP_SIGNAL
 from services.api.VideoProcessor import VideoProcessor
 from services.transcription.translator import Translator
 from services.config.context import ProcessingContext
+from services.utils.context_manager import ContextManager
 from services.models.model_loader import load_translation_model
 from services.utils.aspect import performance_log
 from utils.logging_config import get_component_logger
 
 logger = get_component_logger("video_processor")
-
-global_context = None
-
-
-def set_context(ctx):
-    global global_context
-    global_context = ctx
-
-
-def get_context():
-    return global_context
 
 
 def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator):
@@ -43,6 +33,8 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
         enable_translation: bool = Form(False),
         src_lang: str = Form("en"),
         tgt_lang: str = Form("ar"),
+        start_from: float = Form(0.0),
+        segment_start: int = Form(0),
     ):
         task_id = str(uuid4())
         output_folder = f"temp/{task_id}"  # For initial video save
@@ -54,10 +46,10 @@ def setup_routes(app: FastAPI, processor: VideoProcessor, translator: Translator
 
         client_output_queue, _ = processor.task_manager.register_task(task_id)
 
-        context = ProcessingContext(
-            task_id, temp_file_path, src_lang, tgt_lang, output_folder
-        )
-        set_context(context)
+        context = ContextManager.get_context()
+        context.task_id = task_id
+        context.video_path = temp_file_path
+        context.output_folder = output_folder
 
         print("Context set for task:", context.task_id)
         print("Metadata:", context.video_metadata)

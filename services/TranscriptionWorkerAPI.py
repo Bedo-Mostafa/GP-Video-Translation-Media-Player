@@ -1,9 +1,12 @@
-from os import path, remove
+from os import path
+import os
+import re
 from PySide6.QtCore import QThread, Signal
 from json import loads, JSONDecodeError
 from filelock import FileLock
 from utils.config import get_transcript_file
 from services.TranscriptionClient import TranscriptionClient
+from services.utils.context_manager import ContextManager
 from utils.logging_config import setup_logging
 
 
@@ -27,20 +30,22 @@ class TranscriptionWorkerAPI(QThread):
         self.client = TranscriptionClient(self.server_port, transcription_server)
         self.task_id = None
         self._is_running = True
-        self.lock = FileLock(get_transcript_file(is_lock=True))
+        self.lock = None
+        self.start_from = 0
         self.segment_counter = 0
 
     def run(self):
         """Process transcription stream and save segments."""
         try:
-            # self._prepare_transcription_file()
-            self.segment_counter = 0
+            self._prepare_transcription_file()
             self.client.start_server_if_needed()
             self.task_id, response = self.client.upload_video(
                 self.video_file,
                 self.translate,
                 self.src_lang,
                 self.tgt_lang,
+                self.start_from,
+                self.segment_counter,
                 self.progress.emit,
                 lambda: not self._is_running,
             )
@@ -83,8 +88,8 @@ class TranscriptionWorkerAPI(QThread):
 
     def _format_srt_segment(self, counter, start_time, end_time, text):
         """Format a segment in SRT format."""
-        start_srt = self._seconds_to_srt_time(start_time)
-        end_srt = self._seconds_to_srt_time(end_time)
+        start_srt = self._seconds_to_srt_time(self.start_from + start_time)
+        end_srt = self._seconds_to_srt_time(self.start_from + end_time)
         return f"{counter}\n{start_srt} --> {end_srt}\n{text}\n\n"
 
     def _seconds_to_srt_time(self, seconds):
@@ -95,20 +100,79 @@ class TranscriptionWorkerAPI(QThread):
         mill_secs = int((seconds % 1) * 1000)
         return f"{hours:02d}:{minutes:02d}:{secs:02d},{mill_secs:03d}"
 
+    def _srt_to_seconds_time(self, srt_time):
+        """Convert SRT time format (HH:MM:SS,mmm) to seconds."""
+        if srt_time == "0":
+            return 0
+        match = re.match(r"(\d{2}):(\d{2}):(\d{2}),(\d{3})", srt_time.strip())
+        if match:
+            hours, minutes, seconds, milliseconds = map(int, match.groups())
+            return hours * 3600 + minutes * 60 + seconds + milliseconds / 1000.0
+        raise ValueError(
+            f"Invalid SRT time format: {srt_time} of type {type(srt_time)}"
+        )
+
     def _prepare_transcription_file(self):
-        """Delete existing transcription file if it exists."""
+        """Prepare existing transcription file if it exists."""
         transcript_file = get_transcript_file()
         if path.exists(transcript_file):
-            remove(transcript_file)
-            self.logger.info("Deleted existing transcription file: %s", transcript_file)
-        self.segment_counter = 0
+            with open(transcript_file, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            last_index = 0
+            last_end_time = None
+            i = len(lines) - 1
+
+            # Reverse parse to find last complete subtitle block
+            while i >= 2:
+                line = lines[i].strip()
+                time_line = lines[i - 1].strip()
+                index_line = lines[i - 2].strip()
+
+                match = re.match(r".*-->\s*(\d{2}:\d{2}:\d{2},\d{3})", time_line)
+                if match and index_line.isdigit():
+                    last_index = int(index_line)
+                    last_end_time = match.group(1)
+                    break
+
+                i -= 1
+
+            self.segment_counter = last_index
+            self.start_from = last_end_time
+
+            print(
+                f"Resuming from segment {self.segment_counter} at time {self.start_from}"
+            )
+
+        else:
+            self.segment_counter = 0
+            print("No existing transcription file found, starting fresh.")
+
+        self.start_from = self._srt_to_seconds_time(str(self.start_from))
+
+        context = ContextManager.get_context()
+        context.start_from = self.start_from
+        context.segment_start = self.segment_counter
 
     def _save_segment(self, text):
         """Save a transcription segment to file."""
         transcript_file = get_transcript_file()
+        self.lock = FileLock(get_transcript_file(is_lock=True))
+
         with self.lock:
+            needs_newline = False
+
+            if os.path.exists(transcript_file) and os.path.getsize(transcript_file) > 0:
+                with open(transcript_file, "rb") as f:
+                    f.seek(-2, os.SEEK_END)
+                    last_bytes = f.read(2)
+                    if not last_bytes.endswith(b"\n\n"):
+                        needs_newline = True
+
             with open(transcript_file, "a", encoding="utf-8") as f:
-                f.write(text)
+                if needs_newline:
+                    f.write("\n")
+                f.write(text.rstrip() + "\n")
                 f.flush()
             self.logger.debug("Saved SRT transcription segment: %s", text.strip())
 

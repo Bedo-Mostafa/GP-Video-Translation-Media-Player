@@ -1,6 +1,5 @@
 from filelock import FileLock, Timeout
 from PySide6.QtMultimedia import QMediaPlayer
-from services.TranscriptionWorkerAPI import TranscriptionWorkerAPI
 from utils.config import (
     get_transcript_file,
     SUBTITLE_UPDATE_INTERVAL,

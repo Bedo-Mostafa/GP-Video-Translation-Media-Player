@@ -21,7 +21,7 @@ class AudioPreprocessor:
         """Extracts raw audio into context.audio_data_np."""
         logger.info(f"Task {context.task_id}: Loading raw audio into context.")
         context.audio_data_np, context.sample_rate = extract_raw_audio_to_numpy(
-            context.video_path
+            context.video_path, context.start_from
         )
 
         if context.audio_data_np is None or context.sample_rate is None:
