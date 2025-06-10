@@ -16,7 +16,6 @@ from services.TranscriptionWorkerAPI import TranscriptionWorkerAPI
 from services.utils.context_manager import ContextManager
 from ui.views.video_view import QTimer
 from utils.logging_config import setup_logging
-from utils.config import get_transcript_file
 
 
 class Upload(QWidget):
@@ -98,7 +97,7 @@ class Upload(QWidget):
 
     def check_cached_transcription(self):
         """Check if a cached transcript exists and handle it."""
-        transcript_file = get_transcript_file()
+        transcript_file = ContextManager.get_transcript_file()
         if path.exists(transcript_file) and os.path.getsize(transcript_file) > 0:
             with open(transcript_file, "r", encoding="utf-8") as f:
                 non_empty_lines = [line for line in f if line.strip()]

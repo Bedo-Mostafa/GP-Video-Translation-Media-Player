@@ -1,10 +1,8 @@
 from PySide6.QtCore import Signal, QTimer
-from services.utils.context_manager import ContextManager
 from ui.views.video_view import VideoPlayerUI
 from core.MediaController import MediaController
 from core.SubtitleManager import SubtitleManager
 from utils.logging_config import setup_logging
-from utils.config import get_transcript_file
 
 
 class VideoPlayerLogic(VideoPlayerUI):

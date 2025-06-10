@@ -1,9 +1,7 @@
 from filelock import FileLock, Timeout
 from PySide6.QtMultimedia import QMediaPlayer
-from utils.config import (
-    get_transcript_file,
-    SUBTITLE_UPDATE_INTERVAL,
-)
+from services.utils.context_manager import ContextManager
+from utils.config import SUBTITLE_UPDATE_INTERVAL
 from utils.logging_config import setup_logging
 from os import path
 from re import match, search
@@ -37,7 +35,7 @@ class SubtitleManager:
     def load_initial_transcription(self):
         """Load initial transcription from file."""
 
-        transcript_file = get_transcript_file()
+        transcript_file = ContextManager.get_transcript_file()
         try:
             if path.exists(transcript_file):
                 with open(transcript_file, "r", encoding="utf-8") as f:
@@ -186,8 +184,8 @@ class SubtitleManager:
 
     def refresh_transcription(self):
         """Refresh transcription from file."""
-        transcript_file = get_transcript_file()
-        transcript_lock_file = get_transcript_file(is_lock=True)
+        transcript_file = ContextManager.get_transcript_file()
+        transcript_lock_file = ContextManager.get_transcript_file(is_lock=True)
         try:
             if not path.exists(transcript_file):
                 return
