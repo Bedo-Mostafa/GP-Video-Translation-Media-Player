@@ -20,9 +20,6 @@ from cv2 import VideoCapture, cvtColor, COLOR_BGR2RGB
 LANG_CODE_MAP = {
     "English": "en",
     "Arabic": "ar",
-    "Spanish": "es",
-    "French": "fr",
-    "German": "de",
 }
 
 
@@ -46,7 +43,7 @@ class Welcome(QWidget):
         # Language Selection
 
         lang_layout = QHBoxLayout()
-        languages = ["English", "Arabic", "Spanish", "French", "German"]
+        languages = ["English", "Arabic"]
         self.src_lang_combo = QComboBox()
         self.src_lang_combo.addItems(languages)
         self.src_lang_combo.setCurrentText("English")
@@ -72,6 +69,17 @@ class Welcome(QWidget):
         self.language_warning.setObjectName("warning")
 
         main_layout.addWidget(self.language_warning)
+
+        # Warning label for language selection
+        self.ar_to_en = QLabel(
+            "⚠ Please select a pair other than Arabic to English (not supported)!"
+        )
+        self.ar_to_en.setAlignment(Qt.AlignCenter)
+        self.ar_to_en.setFixedHeight(50)  # Prevent layout jump
+        self.ar_to_en.setVisible(False)
+        self.ar_to_en.setObjectName("warning")
+
+        main_layout.addWidget(self.ar_to_en)
 
         # Add Media Button
         self.media_button = QPushButton("📁 Add Media")
@@ -141,6 +149,14 @@ class Welcome(QWidget):
 
     def send_data(self):
         if self.video_path:
+            if (
+                self.src_lang_combo.currentText() == "Arabic"
+                and self.tgt_lang_combo.currentText() == "English"
+            ):
+                # Show warning message for Arabic to English
+                self.ar_to_en.setVisible(True)
+                QTimer.singleShot(3000, lambda: self.ar_to_en.setVisible(False))
+                return
             self.src_lang = LANG_CODE_MAP[self.src_lang_combo.currentText()]
             self.tgt_lang = LANG_CODE_MAP[self.tgt_lang_combo.currentText()]
 

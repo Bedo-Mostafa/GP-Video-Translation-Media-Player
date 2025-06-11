@@ -128,6 +128,33 @@ QPushButton#CancelButton :hover {
 	background-color: #d32f2f;
 }
 
+QComboBox {
+	background-color: #0078d7;
+	color: white;
+	padding: 8px 12px;
+	border: none;
+	border-radius: 5px;
+	font-size: 14px;
+}
+
+QComboBox:hover {
+	background-color: #005fa3;
+}
+
+QComboBox::drop-down {
+	width: 25px;
+	border-left: 1px solid #005fa3;
+	background-color: #005fa3;
+	border-top-right-radius: 5px;
+	border-bottom-right-radius: 5px;
+}
+
+QComboBox QAbstractItemView {
+	background-color: #1e1e1e;
+	color: white;
+	border: 1px solid #005fa3;
+}
+
 /* //////////////////// videoPlayer //////////////////////////// */
 
 QWidget#central_widget {

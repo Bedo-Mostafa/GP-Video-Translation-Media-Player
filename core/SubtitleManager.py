@@ -184,8 +184,11 @@ class SubtitleManager:
 
     def refresh_transcription(self):
         """Refresh transcription from file."""
-        transcript_file = ContextManager.get_transcript_file()
-        transcript_lock_file = ContextManager.get_transcript_file(is_lock=True)
+        try:
+            transcript_file = ContextManager.get_transcript_file()
+            transcript_lock_file = ContextManager.get_transcript_file(is_lock=True)
+        except AttributeError:
+            print("ContextManager is not initialized yet.")
         try:
             if not path.exists(transcript_file):
                 return
