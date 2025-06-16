@@ -4,7 +4,6 @@ import re
 from PySide6.QtCore import QThread, Signal
 from json import loads, JSONDecodeError
 from filelock import FileLock
-from utils.config import get_transcript_file
 from services.TranscriptionClient import TranscriptionClient
 from services.utils.context_manager import ContextManager
 from utils.logging_config import setup_logging
@@ -111,7 +110,7 @@ class TranscriptionWorkerAPI(QThread):
 
     def _prepare_transcription_file(self):
         """Prepare existing transcription file if it exists."""
-        transcript_file = get_transcript_file()
+        transcript_file = ContextManager.get_transcript_file()
         if path.exists(transcript_file):
             with open(transcript_file, "r", encoding="utf-8") as f:
                 lines = f.readlines()
@@ -153,8 +152,8 @@ class TranscriptionWorkerAPI(QThread):
 
     def _save_segment(self, text):
         """Save a transcription segment to file."""
-        transcript_file = get_transcript_file()
-        self.lock = FileLock(get_transcript_file(is_lock=True))
+        transcript_file = ContextManager.get_transcript_file()
+        self.lock = FileLock(ContextManager.get_transcript_file(is_lock=True))
 
         with self.lock:
             needs_newline = False

@@ -1,13 +1,3 @@
-from services.utils.context_manager import ContextManager
-
-
-def get_transcript_file(is_lock=False, lang=None):
-    context = ContextManager.get_context()
-    if lang is None:
-        lang = context.tgt_lang
-    return context.get_srt_file(lang, is_lock)
-
-
 # Configuration settings for the video player application
 DEFAULT_SERVER_PORT = 8000
 API_BASE_URL = "http://localhost:{port}"
