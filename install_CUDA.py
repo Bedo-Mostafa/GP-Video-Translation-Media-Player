@@ -27,11 +27,26 @@ def get_installed_cuda_version():
 def install_pytorch(cuda_version=None):
     # Map closest CUDA versions to PyTorch URLs
     torch_versions = {
-        "12.1": "https://download.pytorch.org/whl/cu121",
-        "11.8": "https://download.pytorch.org/whl/cu118",
-        "11.7": "https://download.pytorch.org/whl/cu117",
-        "11.6": "https://download.pytorch.org/whl/cu116",
-        "cpu": "https://download.pytorch.org/whl/cpu",
+        {
+            "12.8": "https://download.pytorch.org/whl/cu128",
+            "12.6": "https://download.pytorch.org/whl/cu126",
+            "12.4": "https://download.pytorch.org/whl/cu124",
+            "12.3": "https://download.pytorch.org/whl/cu123",
+            "12.2": "https://download.pytorch.org/whl/cu122",
+            "12.1": "https://download.pytorch.org/whl/cu121",
+            "12.0": "https://download.pytorch.org/whl/cu120",
+            "11.8": "https://download.pytorch.org/whl/cu118",
+            "11.7": "https://download.pytorch.org/whl/cu117",
+            "11.6": "https://download.pytorch.org/whl/cu116",
+            "11.3": "https://download.pytorch.org/whl/cu113",
+            "11.1": "https://download.pytorch.org/whl/cu111",
+            "11.0": "https://download.pytorch.org/whl/cu110",
+            "10.2": "https://download.pytorch.org/whl/cu102",
+            "10.1": "https://download.pytorch.org/whl/cu101",
+            "10.0": "https://download.pytorch.org/whl/cu100",
+            "9.2": "https://download.pytorch.org/whl/cu92",
+            "cpu": "https://download.pytorch.org/whl/cpu",
+        }
     }
 
     # Pick matching or closest lower version
