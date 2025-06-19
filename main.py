@@ -136,32 +136,6 @@ else:
 
 # --- End of Workaround ---
 
-
-# Now, your regular imports can proceed
-try:
-    import torch
-
-    print("Successfully imported torch version:", torch.__version__)
-except ImportError as e:
-    print("FATAL: Could not import PyTorch.")
-    print(
-        "Please ensure PyTorch is installed in the Python environment this app is being run with."
-    )
-    input("Press Enter to exit.")
-    sys.exit(1)
-
-try:
-    import transformers
-
-    print("Successfully imported transformers version:", transformers.__version__)
-except ImportError as e:
-    print("FATAL: Could not import transformers.")
-    print(
-        "Please ensure transformers is installed in the Python environment this app is being run with."
-    )
-    input("Press Enter to exit.")
-    sys.exit(1)
-
 # (rest of your main.py)
 
 
